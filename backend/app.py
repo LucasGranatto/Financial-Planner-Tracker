@@ -91,6 +91,18 @@ def init_db():
         """
     )
 
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS goals (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            name          TEXT NOT NULL,
+            target_amount REAL NOT NULL DEFAULT 0,
+            target_date   TEXT,
+            created_at    TEXT NOT NULL
+        )
+        """
+    )
+
     # Migração de versões antigas: 'receita' -> 'ganho', 'despesa' -> 'gasto'
     conn.execute("UPDATE entries SET type = 'ganho' WHERE type = 'receita'")
     conn.execute("UPDATE entries SET type = 'gasto' WHERE type = 'despesa'")
@@ -119,6 +131,15 @@ def row_to_dict(row):
         "category": row["category"],
         "type": row["type"],
         "amount": row["amount"],
+    }
+
+
+def goal_row_to_dict(row):
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "target_amount": row["target_amount"],
+        "target_date": row["target_date"],
     }
 
 
@@ -312,6 +333,99 @@ def delete_entry(entry_id):
     if existing is None:
         return jsonify({"error": "Lançamento não encontrado."}), 404
     db.execute("DELETE FROM entries WHERE id = ?", (entry_id,))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+# --------------------------------------------------------------------------
+# API — Metas futuras (goals)
+# --------------------------------------------------------------------------
+
+@app.route("/api/goals", methods=["GET"])
+def list_goals():
+    db = get_db()
+    rows = db.execute(
+        "SELECT * FROM goals ORDER BY (target_date IS NULL), target_date ASC, id ASC"
+    ).fetchall()
+    return jsonify([goal_row_to_dict(r) for r in rows])
+
+
+def validate_goal_payload(data, partial=False):
+    errors = []
+    if not partial or "name" in data:
+        if not (data.get("name") or "").strip():
+            errors.append("Informe um nome para a meta.")
+    if not partial or "target_amount" in data:
+        try:
+            if float(data.get("target_amount", 0)) <= 0:
+                errors.append("O valor da meta deve ser maior que zero.")
+        except (ValueError, TypeError):
+            errors.append("Valor da meta deve ser numérico.")
+    target_date = data.get("target_date")
+    if target_date:
+        try:
+            datetime.strptime(target_date, "%Y-%m-%d")
+        except ValueError:
+            errors.append("Data da meta inválida. Use o formato AAAA-MM-DD.")
+    return errors
+
+
+@app.route("/api/goals", methods=["POST"])
+def create_goal():
+    data = request.get_json(force=True) or {}
+    errors = validate_goal_payload(data)
+    if errors:
+        return jsonify({"errors": errors}), 400
+
+    db = get_db()
+    cur = db.execute(
+        "INSERT INTO goals (name, target_amount, target_date, created_at) VALUES (?, ?, ?, ?)",
+        (
+            data["name"].strip(),
+            float(data["target_amount"]),
+            data.get("target_date") or None,
+            datetime.utcnow().isoformat(),
+        ),
+    )
+    db.commit()
+    row = db.execute("SELECT * FROM goals WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return jsonify(goal_row_to_dict(row)), 201
+
+
+@app.route("/api/goals/<int:goal_id>", methods=["PUT"])
+def update_goal(goal_id):
+    data = request.get_json(force=True) or {}
+    errors = validate_goal_payload(data, partial=True)
+    if errors:
+        return jsonify({"errors": errors}), 400
+
+    db = get_db()
+    existing = db.execute("SELECT * FROM goals WHERE id = ?", (goal_id,)).fetchone()
+    if existing is None:
+        return jsonify({"error": "Meta não encontrada."}), 404
+
+    merged = {
+        "name": (data.get("name") or existing["name"]).strip(),
+        "target_amount": float(data.get("target_amount", existing["target_amount"])),
+        "target_date": data.get("target_date", existing["target_date"]) or None,
+    }
+
+    db.execute(
+        "UPDATE goals SET name = ?, target_amount = ?, target_date = ? WHERE id = ?",
+        (merged["name"], merged["target_amount"], merged["target_date"], goal_id),
+    )
+    db.commit()
+    row = db.execute("SELECT * FROM goals WHERE id = ?", (goal_id,)).fetchone()
+    return jsonify(goal_row_to_dict(row))
+
+
+@app.route("/api/goals/<int:goal_id>", methods=["DELETE"])
+def delete_goal(goal_id):
+    db = get_db()
+    existing = db.execute("SELECT id FROM goals WHERE id = ?", (goal_id,)).fetchone()
+    if existing is None:
+        return jsonify({"error": "Meta não encontrada."}), 404
+    db.execute("DELETE FROM goals WHERE id = ?", (goal_id,))
     db.commit()
     return jsonify({"ok": True})
 
