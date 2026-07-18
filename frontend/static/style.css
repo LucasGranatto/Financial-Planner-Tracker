@@ -1,33 +1,43 @@
 /* ==========================================================================
    PLANNER — design tokens
-   Paleta neutra: cinza-carvão quente de fundo, com acentos discretos
-   em salvia (ganho), argila (gasto) e areia (destaque/saldo).
-   Tipografia: Fraunces (display) + Inter (corpo) + IBM Plex Mono (números).
+   Conceito: caderno de razão (ledger) em papel — mas com tinta viva, não
+   morta. Fundo claro em verde-água pálido, tinta quase-preta azulada, e
+   três cores de tinta bem saturadas para ganho (jade), gasto (carmim) e
+   destaque/saldo (cobalto). O elemento de assinatura é a fileira de
+   "abas de fichário" acima do livro de lançamentos, usada para navegar
+   entre meses — como as guias de um caderno de contas físico.
+   Tipografia: Instrument Serif (display, itálico como acento) + Inter
+   (corpo) + IBM Plex Mono (números e datas).
    ========================================================================== */
 
 :root {
-  --bg:            #17181A;
-  --bg-elevated:   #1D1E21;
-  --bg-card:       #202125;
-  --line:          rgba(255, 255, 255, 0.08);
-  --line-strong:   rgba(255, 255, 255, 0.16);
+  --bg:            #EAF2ED;
+  --bg-elevated:   #F5F9F6;
+  --bg-card:       #FFFFFF;
+  --bg-sunken:     #DCE8E0;
+  --line:          rgba(19, 31, 34, 0.10);
+  --line-strong:   rgba(19, 31, 34, 0.22);
 
-  --text:          #EAE9E5;
-  --text-muted:    #9C9B96;
-  --text-faint:    #6B6A65;
+  --text:          #131F22;
+  --text-muted:    #52646A;
+  --text-faint:    #86969B;
 
-  --accent-ganho:      #90A091;
-  --accent-ganho-dim:  rgba(144, 160, 145, 0.16);
-  --accent-gasto:      #AD9482;
-  --accent-gasto-dim:  rgba(173, 148, 130, 0.16);
-  --accent-highlight:      #BDB6A8;
-  --accent-highlight-dim:  rgba(189, 182, 168, 0.16);
+  --accent-ganho:      #0E9A62;
+  --accent-ganho-dim:  rgba(14, 154, 98, 0.13);
+  --accent-gasto:      #D8434B;
+  --accent-gasto-dim:  rgba(216, 67, 75, 0.13);
+  --accent-highlight:      #2A55E5;
+  --accent-highlight-dim:  rgba(42, 85, 229, 0.12);
+  --accent-gold:       #C98A28;
+  --accent-gold-dim:   rgba(201, 138, 40, 0.14);
 
   --radius-s: 6px;
   --radius-m: 10px;
   --radius-l: 16px;
 
-  --font-display: 'Fraunces', serif;
+  --shadow-card: 0 1px 2px rgba(19,31,34,0.04), 0 8px 20px -12px rgba(19,31,34,0.18);
+
+  --font-display: 'Instrument Serif', serif;
   --font-body: 'Inter', sans-serif;
   --font-mono: 'IBM Plex Mono', monospace;
 }
@@ -45,8 +55,8 @@ html, body {
 
 body {
   background-image:
-    radial-gradient(circle at 15% 0%, rgba(255,255,255,0.03), transparent 45%),
-    radial-gradient(circle at 85% 15%, rgba(255,255,255,0.02), transparent 40%);
+    radial-gradient(circle at 12% -4%, rgba(42,85,229,0.06), transparent 42%),
+    radial-gradient(circle at 92% 8%, rgba(14,154,98,0.05), transparent 40%);
   background-attachment: fixed;
 }
 
@@ -80,22 +90,22 @@ button {
 
 .brand-mark {
   font-family: var(--font-display);
-  font-size: 26px;
-  font-weight: 600;
+  font-style: italic;
+  font-size: 28px;
   width: 42px;
   height: 42px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--line-strong);
   border-radius: var(--radius-s);
-  color: var(--accent-highlight);
+  color: #fff;
+  background: var(--accent-highlight);
 }
 
 .brand-text h1 {
   font-family: var(--font-display);
-  font-size: 22px;
-  font-weight: 600;
+  font-size: 25px;
+  font-weight: 400;
   margin: 0;
   letter-spacing: 0.01em;
 }
@@ -121,7 +131,7 @@ button {
   align-items: flex-end;
   justify-content: space-between;
   gap: 40px;
-  padding-bottom: 44px;
+  padding-bottom: 40px;
   margin-bottom: 44px;
   border-bottom: 1px solid var(--line);
   flex-wrap: wrap;
@@ -132,43 +142,27 @@ button {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-faint);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .hero-number-wrap {
   position: relative;
   display: inline-block;
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 .hero-number {
   font-family: var(--font-display);
-  font-size: clamp(40px, 6vw, 64px);
-  font-weight: 500;
+  font-size: clamp(44px, 6.4vw, 68px);
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
   line-height: 1;
   letter-spacing: -0.01em;
   color: var(--text);
 }
 
-.hero-underline {
-  position: absolute;
-  left: 0;
-  bottom: -12px;
-  width: 100%;
-  height: 16px;
-}
-
-.hero-underline path {
-  fill: none;
-  stroke: var(--accent-highlight);
-  stroke-width: 2.5;
-  stroke-linecap: round;
-  opacity: 0.8;
-}
-
 .hero-caption {
-  margin: 22px 0 0;
+  margin: 18px 0 0;
   font-size: 13.5px;
   color: var(--text-muted);
   max-width: 360px;
@@ -184,7 +178,8 @@ button {
   padding: 14px 18px;
   border-radius: var(--radius-m);
   border: 1px solid var(--line);
-  background: var(--bg-elevated);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-card);
   min-width: 140px;
 }
 
@@ -194,6 +189,7 @@ button {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-faint);
+  font-weight: 600;
   margin-bottom: 6px;
 }
 
@@ -205,12 +201,12 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
-.chip--ganho { border-color: rgba(144,160,145,0.30); }
+.chip--ganho { border-color: rgba(14,154,98,0.35); }
 .chip--ganho .chip-value { color: var(--accent-ganho); }
-.chip--gasto { border-color: rgba(173,148,130,0.30); }
+.chip--gasto { border-color: rgba(216,67,75,0.35); }
 .chip--gasto .chip-value { color: var(--accent-gasto); }
-.chip--economia { border-color: rgba(189,182,168,0.30); }
-.chip--economia .chip-value { color: var(--accent-highlight); }
+.chip--economia { border-color: rgba(201,138,40,0.4); }
+.chip--economia .chip-value { color: var(--accent-gold); }
 
 /* ============================== SECTION HEAD ============================== */
 
@@ -219,7 +215,7 @@ button {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-faint);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .section-head {
@@ -233,32 +229,33 @@ button {
 
 .section-head h2, .section-head h3 {
   font-family: var(--font-display);
-  font-weight: 500;
+  font-weight: 400;
   margin: 4px 0 0;
 }
 
-.section-head h2 { font-size: 24px; }
+.section-head h2 { font-size: 26px; }
 
 .btn {
   border: 1px solid var(--line-strong);
-  background: transparent;
+  background: var(--bg-card);
   color: var(--text);
   padding: 10px 18px;
   border-radius: var(--radius-s);
   font-size: 13.5px;
   font-weight: 500;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
 }
 
-.btn:hover { background: rgba(255,255,255,0.04); }
+.btn:hover { background: var(--bg-elevated); border-color: var(--accent-highlight); }
+.btn:active { transform: translateY(1px); }
 
 .btn--primary {
-  background: var(--accent-ganho-dim);
-  border-color: rgba(144,160,145,0.4);
-  color: var(--accent-ganho);
+  background: var(--accent-highlight);
+  border-color: var(--accent-highlight);
+  color: #fff;
 }
 
-.btn--primary:hover { background: rgba(144,160,145,0.24); }
+.btn--primary:hover { background: #2247C7; border-color: #2247C7; }
 
 .btn--small {
   padding: 8px 14px;
@@ -275,6 +272,7 @@ button {
   border: 1px solid var(--line);
   border-radius: var(--radius-l);
   background: var(--bg-card);
+  box-shadow: var(--shadow-card);
   padding: 22px;
 }
 
@@ -287,7 +285,7 @@ button {
 .categories-column-title {
   font-family: var(--font-body);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   margin: 0 0 12px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--line);
@@ -358,16 +356,77 @@ button {
   color: var(--text-faint);
 }
 
+/* ============================== MONTH TABS (signature element) ==============================
+   Abas de fichário: cada mês vira uma "guia" acima do livro de lançamentos,
+   como as divisórias de um caderno de contas físico. A guia ativa fica
+   nivelada com a tabela; as demais recuam, como páginas por trás. */
+
+.month-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  padding: 0 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.month-tabs::-webkit-scrollbar { display: none; }
+
+.month-tab {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px 8px;
+  border: 1px solid var(--line-strong);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  background: var(--bg-sunken);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  transform: translateY(5px);
+  transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+  position: relative;
+}
+
+.month-tab:hover { transform: translateY(2px); color: var(--text); }
+
+.month-tab.is-active {
+  background: var(--bg-card);
+  color: var(--text);
+  font-weight: 600;
+  transform: translateY(0);
+  z-index: 2;
+  box-shadow: 0 -2px 0 0 var(--accent-highlight) inset;
+}
+
+.month-tab-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  flex: 0 0 auto;
+}
+
+.month-tab-dot--up { background: var(--accent-ganho); }
+.month-tab-dot--down { background: var(--accent-gasto); }
+
 /* ============================== LEDGER TABLE ============================== */
 
 .ledger-section { margin-bottom: 56px; }
 
 .ledger-table-wrap {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-l);
+  border: 1px solid var(--line-strong);
+  border-radius: 0 var(--radius-l) var(--radius-l) var(--radius-l);
   overflow: hidden;
   background: var(--bg-card);
+  box-shadow: var(--shadow-card);
 }
+
+.month-tabs:not(:empty) + .ledger-table-wrap { margin-top: -1px; }
 
 .ledger-table {
   width: 100%;
@@ -381,7 +440,7 @@ button {
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--text-faint);
-  font-weight: 500;
+  font-weight: 700;
   padding: 14px 16px;
   border-bottom: 1px solid var(--line-strong);
   background: var(--bg-elevated);
@@ -396,8 +455,8 @@ button {
   vertical-align: middle;
 }
 
-.ledger-row:nth-child(even) { background: rgba(255,255,255,0.015); }
-.ledger-row:hover { background: rgba(255,255,255,0.03); }
+.ledger-row:nth-child(even) { background: rgba(19,31,34,0.02); }
+.ledger-row:hover { background: var(--accent-highlight-dim); }
 
 .col-amount, .col-balance { text-align: right; }
 .col-actions { width: 40px; text-align: center; }
@@ -424,7 +483,7 @@ button {
 .cell-input:focus {
   outline: none;
   border-color: var(--accent-highlight);
-  background: rgba(189,182,168,0.06);
+  background: var(--accent-highlight-dim);
 }
 
 .cell-type, .cell-cat {
@@ -439,7 +498,7 @@ button {
 }
 
 .cell-cat option, .cell-type option {
-  background: var(--bg-elevated);
+  background: var(--bg-card);
   color: var(--text);
 }
 
@@ -486,14 +545,15 @@ button {
   border: 1px solid var(--line);
   border-radius: var(--radius-l);
   background: var(--bg-card);
+  box-shadow: var(--shadow-card);
   padding: 22px 22px 12px;
 }
 
 .chart-card-head { margin-bottom: 6px; }
 .chart-card-head h3 {
   font-family: var(--font-display);
-  font-weight: 500;
-  font-size: 17px;
+  font-weight: 400;
+  font-size: 19px;
   margin: 4px 0 0;
 }
 
