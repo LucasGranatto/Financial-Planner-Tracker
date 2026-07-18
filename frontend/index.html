@@ -6,24 +6,26 @@
 <title>Planner — Planejador Financeiro</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
 
-<div class="page">
-
-  <!-- ============================== HEADER ============================== -->
-  <header class="brand-bar">
+<header class="site-header">
+  <div class="site-header-inner">
     <div class="brand">
-      <span class="brand-mark">P.</span>
       <div class="brand-text">
-        <h1>Planner</h1>
+        <h1>Planner<span class="brand-dot">.</span></h1>
         <p>Seu planejador financeiro pessoal</p>
       </div>
     </div>
-    <div class="brand-date" id="today-label"></div>
-  </header>
+    <div class="site-header-meta">
+      <div class="brand-date" id="today-label"></div>
+    </div>
+  </div>
+</header>
+
+<div class="page">
 
   <!-- ============================== HERO / SALDO ============================== -->
   <section class="hero">
