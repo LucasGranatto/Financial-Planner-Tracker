@@ -22,6 +22,7 @@ const el = {
   gastoCategoryList: document.getElementById("gasto-category-list"),
   ganhoCategoryForm: document.getElementById("ganho-category-form"),
   gastoCategoryForm: document.getElementById("gasto-category-form"),
+  monthTabs: document.getElementById("month-tabs"),
 };
 
 let monthlyChart = null;
@@ -29,6 +30,13 @@ let categoryChart = null;
 
 // cache local das categorias, atualizada sempre que a lista muda
 let categoriesCache = [];
+
+// cache local de todos os lançamentos (para calcular saldo corrente
+// corretamente mesmo quando uma aba de mês está filtrando a visualização)
+let entriesCache = [];
+
+// mês selecionado nas abas ("todos" ou "AAAA-MM")
+let activeMonth = "todos";
 
 const currencyFmt = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -192,22 +200,110 @@ function refreshAllRowCategorySelects() {
 async function loadEntries() {
   try {
     const res = await fetch(`${API}/entries`);
-    const entries = await res.json();
-    renderRows(entries);
+    entriesCache = await res.json();
+    renderMonthTabs();
+    renderRows();
     loadSummary();
   } catch (err) {
     console.error("Falha ao carregar lançamentos", err);
   }
 }
 
-function renderRows(entries) {
-  el.tbody.innerHTML = "";
-  el.emptyState.hidden = entries.length > 0;
-
+// Calcula o saldo corrente de cada lançamento em ordem cronológica (sempre
+// sobre a lista completa) e devolve pares [entry, saldoNaquelaLinha].
+function entriesWithRunningBalance() {
   let running = 0;
-  for (const entry of entries) {
+  return entriesCache.map((entry) => {
     running += entry.type === "ganho" ? entry.amount : -entry.amount;
-    const row = buildRow(entry, running);
+    return { entry, balance: running };
+  });
+}
+
+function monthKeyOf(entry) {
+  return entry.date.slice(0, 7);
+}
+
+// Constrói as abas de mês a partir dos meses presentes nos lançamentos,
+// mais uma aba fixa "Todos". Cada aba mostra um ponto colorido indicando
+// se aquele mês fechou no positivo (verde) ou no negativo (vermelho).
+function renderMonthTabs() {
+  const monthTotals = new Map(); // "AAAA-MM" -> economia do mês
+  for (const entry of entriesCache) {
+    const key = monthKeyOf(entry);
+    const delta = entry.type === "ganho" ? entry.amount : -entry.amount;
+    monthTotals.set(key, (monthTotals.get(key) || 0) + delta);
+  }
+
+  const months = Array.from(monthTotals.keys()).sort();
+
+  // se o mês ativo não existe mais (ex: última linha daquele mês foi
+  // apagada), volta para "Todos"
+  if (activeMonth !== "todos" && !monthTotals.has(activeMonth)) {
+    activeMonth = "todos";
+  }
+
+  el.monthTabs.innerHTML = "";
+
+  if (months.length === 0) {
+    return; // nada para mostrar ainda
+  }
+
+  const allTab = buildMonthTabButton("todos", "Todos", null);
+  el.monthTabs.appendChild(allTab);
+
+  for (const key of months) {
+    const economia = monthTotals.get(key);
+    const dotClass = economia > 0 ? "up" : economia < 0 ? "down" : null;
+    const tab = buildMonthTabButton(key, monthLabel(key), dotClass);
+    el.monthTabs.appendChild(tab);
+  }
+}
+
+function buildMonthTabButton(key, label, dotClass) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "month-tab" + (key === activeMonth ? " is-active" : "");
+  btn.dataset.month = key;
+
+  if (dotClass) {
+    const dot = document.createElement("span");
+    dot.className = `month-tab-dot month-tab-dot--${dotClass}`;
+    btn.appendChild(dot);
+  }
+
+  const text = document.createElement("span");
+  text.textContent = label;
+  btn.appendChild(text);
+
+  btn.addEventListener("click", () => {
+    if (activeMonth === key) return;
+    activeMonth = key;
+    renderMonthTabs();
+    renderRows();
+  });
+
+  return btn;
+}
+
+function renderRows() {
+  el.tbody.innerHTML = "";
+
+  const withBalance = entriesWithRunningBalance();
+  const visible =
+    activeMonth === "todos"
+      ? withBalance
+      : withBalance.filter(({ entry }) => monthKeyOf(entry) === activeMonth);
+
+  el.emptyState.hidden = visible.length > 0;
+  if (entriesCache.length > 0 && visible.length === 0) {
+    el.emptyState.textContent = "Nenhum lançamento neste mês.";
+  } else {
+    el.emptyState.innerHTML =
+      "Nenhum lançamento ainda. Clique em <strong>+ Novo lançamento</strong> para abrir a primeira linha do seu planner.";
+  }
+
+  for (const { entry, balance } of visible) {
+    const row = buildRow(entry, balance);
     el.tbody.appendChild(row);
   }
 }
@@ -277,6 +373,7 @@ async function createBlankRow() {
       }),
     });
     if (!res.ok) throw new Error("Erro ao criar lançamento");
+    activeMonth = today.slice(0, 7);
     await loadEntries();
     focusLastRowDescription();
   } catch (err) {
@@ -354,11 +451,16 @@ function monthLabel(monthKey) {
   );
 }
 
+// Gráfico redesenhado: em vez de barras agrupadas + linha em eixo duplo
+// (difícil de comparar de relance), ganhos sobem a partir do zero e gastos
+// descem a partir do zero — a "forma" do mês aparece num único olhar.
+// O saldo acumulado vira uma linha fina no mesmo eixo, mostrando a
+// tendência por cima das barras.
 function renderMonthlyChart(monthly) {
   const ctx = document.getElementById("monthly-chart");
   const labels = monthly.map((m) => monthLabel(m.month));
   const ganhos = monthly.map((m) => m.ganhos);
-  const gastos = monthly.map((m) => m.gastos);
+  const gastosNegativos = monthly.map((m) => -m.gastos);
   const saldoAcumulado = monthly.map((m) => m.saldo_acumulado);
 
   if (monthlyChart) monthlyChart.destroy();
@@ -371,30 +473,31 @@ function renderMonthlyChart(monthly) {
           type: "bar",
           label: "Ganhos",
           data: ganhos,
-          backgroundColor: "rgba(144,160,145,0.55)",
+          backgroundColor: "rgba(14,154,98,0.65)",
           borderRadius: 4,
           order: 2,
+          stack: "fluxo",
         },
         {
           type: "bar",
           label: "Gastos",
-          data: gastos,
-          backgroundColor: "rgba(173,148,130,0.55)",
+          data: gastosNegativos,
+          backgroundColor: "rgba(216,67,75,0.65)",
           borderRadius: 4,
           order: 2,
+          stack: "fluxo",
         },
         {
           type: "line",
           label: "Saldo acumulado",
           data: saldoAcumulado,
-          borderColor: "#BDB6A8",
-          backgroundColor: "#BDB6A8",
-          tension: 0.35,
+          borderColor: "#2A55E5",
+          backgroundColor: "#2A55E5",
+          tension: 0.3,
           pointRadius: 3,
-          pointBackgroundColor: "#BDB6A8",
+          pointBackgroundColor: "#2A55E5",
           borderWidth: 2,
           order: 1,
-          yAxisID: "y1",
         },
       ],
     },
@@ -404,34 +507,27 @@ function renderMonthlyChart(monthly) {
       interaction: { mode: "index", intersect: false },
       plugins: {
         legend: {
-          labels: { color: "#9C9B96", font: { family: "Inter", size: 11.5 } },
+          labels: { color: "#52646A", font: { family: "Inter", size: 11.5 } },
         },
         tooltip: {
           callbacks: {
-            label: (ctx) => `${ctx.dataset.label}: ${formatCurrency(ctx.parsed.y)}`,
+            label: (ctx) => `${ctx.dataset.label}: ${formatCurrency(Math.abs(ctx.parsed.y))}`,
           },
         },
       },
       scales: {
         x: {
-          ticks: { color: "#9C9B96", font: { family: "IBM Plex Mono", size: 11 } },
+          ticks: { color: "#52646A", font: { family: "IBM Plex Mono", size: 11 } },
           grid: { display: false },
         },
         y: {
           ticks: {
-            color: "#9C9B96",
+            color: "#52646A",
             font: { family: "IBM Plex Mono", size: 10.5 },
-            callback: (v) => formatCurrency(v),
+            callback: (v) => formatCurrency(Math.abs(v)),
           },
-          grid: { color: "rgba(255,255,255,0.05)" },
-        },
-        y1: {
-          position: "right",
-          grid: { display: false },
-          ticks: {
-            color: "#BDB6A8",
-            font: { family: "IBM Plex Mono", size: 10.5 },
-            callback: (v) => formatCurrency(v),
+          grid: {
+            color: (ctx) => (ctx.tick.value === 0 ? "rgba(19,31,34,0.28)" : "rgba(19,31,34,0.07)"),
           },
         },
       },
@@ -440,8 +536,8 @@ function renderMonthlyChart(monthly) {
 }
 
 const DONUT_COLORS = [
-  "#90A091", "#AD9482", "#BDB6A8", "#8C9BA6", "#A79BAE",
-  "#B0A688", "#87A3A3", "#A38878", "#94A387", "#A387A0",
+  "#D8434B", "#2A55E5", "#C98A28", "#0E9A62", "#7B5FE0",
+  "#E5789A", "#3D9AD1", "#B5641F", "#5FA88A", "#9C6BC2",
 ];
 
 function renderCategoryChart(byCategory) {
@@ -461,7 +557,7 @@ function renderCategoryChart(byCategory) {
         {
           data: byCategory.map((c) => c.amount),
           backgroundColor: byCategory.map((_, i) => DONUT_COLORS[i % DONUT_COLORS.length]),
-          borderColor: "#202125",
+          borderColor: "#FFFFFF",
           borderWidth: 2,
         },
       ],
@@ -474,7 +570,7 @@ function renderCategoryChart(byCategory) {
         legend: {
           position: "bottom",
           labels: {
-            color: "#9C9B96",
+            color: "#52646A",
             font: { family: "Inter", size: 10.5 },
             boxWidth: 10,
             padding: 10,
