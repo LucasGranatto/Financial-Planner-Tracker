@@ -65,6 +65,40 @@ function formatCurrency(value) {
   return currencyFmt.format(value || 0);
 }
 
+// A API sempre fala em AAAA-MM-DD (ISO); a tabela mostra e edita no
+// formato brasileiro dd/mm/aaaa. Essas duas funções fazem a ponte.
+function formatDateDisplay(isoDate) {
+  if (!isoDate) return "";
+  const [year, month, day] = isoDate.split("-");
+  return `${day}/${month}/${year}`;
+}
+
+function parseDateDisplay(displayDate) {
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec((displayDate || "").trim());
+  if (!match) return null;
+  const [, day, month, year] = match;
+  const iso = `${year}-${month}-${day}`;
+  const date = new Date(`${iso}T00:00:00`);
+  const valid =
+    date.getUTCFullYear() === Number(year) &&
+    date.getUTCMonth() + 1 === Number(month) &&
+    date.getUTCDate() === Number(day);
+  return valid ? iso : null;
+}
+
+// Adiciona as barras "/" conforme a pessoa digita, sem precisar digitá-las
+// (dd -> dd/ -> dd/mm -> dd/mm/ -> dd/mm/aaaa).
+function maskDateInput(event) {
+  const digits = event.target.value.replace(/\D/g, "").slice(0, 8);
+  let formatted = digits;
+  if (digits.length > 4) {
+    formatted = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 8)}`;
+  } else if (digits.length > 2) {
+    formatted = `${digits.slice(0, 2)}/${digits.slice(2, 4)}`;
+  }
+  event.target.value = formatted;
+}
+
 // ----------------------------------------------------------------------------
 // Inicialização
 // ----------------------------------------------------------------------------
@@ -443,7 +477,7 @@ function buildRow(entry, runningBalance) {
   const balanceSpan = tr.querySelector(".cell-balance");
   const deleteBtn = tr.querySelector(".row-delete");
 
-  dateInput.value = entry.date;
+  dateInput.value = formatDateDisplay(entry.date);
   descInput.value = entry.description;
   typeSelect.value = entry.type;
   populateCategorySelect(catSelect, entry.type, entry.category);
@@ -452,13 +486,24 @@ function buildRow(entry, runningBalance) {
   balanceSpan.style.color =
     runningBalance < 0 ? "var(--accent-gasto)" : "var(--text-muted)";
 
-  const commit = () => saveRow(tr, {
-    date: dateInput.value,
-    description: descInput.value,
-    category: catSelect.value,
-    type: typeSelect.value,
-    amount: parseFloat(amountInput.value || "0"),
-  });
+  dateInput.addEventListener("input", maskDateInput);
+
+  const commit = () => {
+    const isoDate = parseDateDisplay(dateInput.value);
+    if (!isoDate) {
+      alert("Data inválida. Use o formato dd/mm/aaaa.");
+      dateInput.value = formatDateDisplay(entry.date);
+      dateInput.focus();
+      return;
+    }
+    saveRow(tr, {
+      date: isoDate,
+      description: descInput.value,
+      category: catSelect.value,
+      type: typeSelect.value,
+      amount: parseFloat(amountInput.value || "0"),
+    });
+  };
 
   [dateInput, descInput, catSelect, amountInput].forEach((input) =>
     input.addEventListener("change", commit)
@@ -601,3 +646,119 @@ function renderMonthlyChart(monthly) {
           stack: "fluxo",
         },
         {
+          type: "bar",
+          label: "Gastos",
+          data: gastosNegativos,
+          backgroundColor: "rgba(255,92,100,0.7)",
+          borderRadius: 4,
+          order: 2,
+          stack: "fluxo",
+        },
+        {
+          type: "line",
+          label: "Saldo acumulado",
+          data: saldoAcumulado,
+          borderColor: "#5B82FF",
+          backgroundColor: "#5B82FF",
+          tension: 0.3,
+          pointRadius: 3,
+          pointBackgroundColor: "#5B82FF",
+          borderWidth: 2,
+          order: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: {
+          labels: { color: "#9BAAA2", font: { family: "Inter", size: 11.5 } },
+        },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.dataset.label}: ${formatCurrency(Math.abs(ctx.parsed.y))}`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { color: "#9BAAA2", font: { family: "IBM Plex Mono", size: 11 } },
+          grid: { display: false },
+        },
+        y: {
+          ticks: {
+            color: "#9BAAA2",
+            font: { family: "IBM Plex Mono", size: 10.5 },
+            callback: (v) => formatCurrency(Math.abs(v)),
+          },
+          grid: {
+            color: (ctx) => (ctx.tick.value === 0 ? "rgba(255,255,255,0.24)" : "rgba(255,255,255,0.06)"),
+          },
+        },
+      },
+    },
+  });
+}
+
+const DONUT_COLORS = [
+  "#F2B84E", "#FF5C64", "#5B82FF", "#B48CFF", "#4DB8E8",
+  "#F08AAB", "#E0913D", "#8C7AE6", "#7A93E8", "#E0648B",
+];
+
+function renderCategoryChart(byCategory) {
+  const ctx = document.getElementById("category-chart");
+  el.categoryEmpty.hidden = byCategory.length > 0;
+  document.getElementById("category-chart").style.display =
+    byCategory.length > 0 ? "block" : "none";
+
+  if (categoryChart) categoryChart.destroy();
+  if (byCategory.length === 0) return;
+
+  categoryChart = new Chart(ctx, {
+    type: "doughnut",
+    data: {
+      labels: byCategory.map((c) => c.category),
+      datasets: [
+        {
+          data: byCategory.map((c) => c.amount),
+          backgroundColor: byCategory.map((_, i) => DONUT_COLORS[i % DONUT_COLORS.length]),
+          borderColor: "#151923",
+          borderWidth: 2,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: "62%",
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: {
+            color: "#9BAAA2",
+            font: { family: "Inter", size: 10.5 },
+            boxWidth: 10,
+            padding: 10,
+          },
+        },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.label}: ${formatCurrency(ctx.parsed)}`,
+          },
+        },
+      },
+    },
+  });
+}
+
+// ----------------------------------------------------------------------------
+// Utils
+// ----------------------------------------------------------------------------
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
