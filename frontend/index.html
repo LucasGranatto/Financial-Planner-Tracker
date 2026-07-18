@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Planner — Planejador Financeiro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<div class="page">
+
+  <!-- ============================== HEADER ============================== -->
+  <header class="brand-bar">
+    <div class="brand">
+      <span class="brand-mark">P.</span>
+      <div class="brand-text">
+        <h1>Planner</h1>
+        <p>Seu planejador financeiro pessoal</p>
+      </div>
+    </div>
+    <div class="brand-date" id="today-label"></div>
+  </header>
+
+  <!-- ============================== HERO / SALDO ============================== -->
+  <section class="hero">
+    <div class="hero-figure">
+      <span class="hero-eyebrow">Saldo acumulado</span>
+      <div class="hero-number-wrap">
+        <span class="hero-number" id="saldo-total">R$ 0,00</span>
+        <svg class="hero-underline" viewBox="0 0 320 20" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M2 14 C 60 4, 110 18, 160 10 C 210 3, 260 16, 318 8" />
+        </svg>
+      </div>
+      <p class="hero-caption">Tudo o que entrou, menos tudo o que saiu, desde o primeiro lançamento</p>
+    </div>
+
+    <div class="hero-chips">
+      <div class="chip chip--ganho">
+        <span class="chip-label">Ganhos</span>
+        <span class="chip-value" id="total-ganhos">R$ 0,00</span>
+      </div>
+      <div class="chip chip--gasto">
+        <span class="chip-label">Gastos</span>
+        <span class="chip-value" id="total-gastos">R$ 0,00</span>
+      </div>
+      <div class="chip chip--economia">
+        <span class="chip-label">Taxa de economia</span>
+        <span class="chip-value" id="taxa-economia">0%</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== CATEGORIAS ============================== -->
+  <section class="categories-section">
+    <div class="section-head">
+      <div>
+        <span class="section-eyebrow">Organização</span>
+        <h2>Suas categorias</h2>
+      </div>
+      <button class="btn" id="toggle-categories-btn" aria-expanded="false">Gerenciar categorias</button>
+    </div>
+
+    <div class="categories-panel" id="categories-panel" hidden>
+      <div class="categories-columns">
+        <div class="categories-column">
+          <h3 class="categories-column-title categories-column-title--ganho">Categorias de ganho</h3>
+          <div class="category-chip-list" id="ganho-category-list"></div>
+          <form class="category-add-form" id="ganho-category-form">
+            <input type="text" class="category-add-input" placeholder="Nova categoria de ganho" required />
+            <button type="submit" class="btn btn--small">Adicionar</button>
+          </form>
+        </div>
+        <div class="categories-column">
+          <h3 class="categories-column-title categories-column-title--gasto">Categorias de gasto</h3>
+          <div class="category-chip-list" id="gasto-category-list"></div>
+          <form class="category-add-form" id="gasto-category-form">
+            <input type="text" class="category-add-input" placeholder="Nova categoria de gasto" required />
+            <button type="submit" class="btn btn--small">Adicionar</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== TABELA ============================== -->
+  <section class="ledger-section">
+    <div class="section-head">
+      <div>
+        <span class="section-eyebrow">Livro de lançamentos</span>
+        <h2>Seus lançamentos</h2>
+      </div>
+      <button class="btn btn--primary" id="add-row-btn">+ Novo lançamento</button>
+    </div>
+
+    <div class="ledger-table-wrap">
+      <table class="ledger-table" id="ledger-table">
+        <thead>
+          <tr>
+            <th class="col-date">Data</th>
+            <th class="col-desc">Descrição</th>
+            <th class="col-cat">Categoria</th>
+            <th class="col-type">Tipo</th>
+            <th class="col-amount">Valor</th>
+            <th class="col-balance">Saldo</th>
+            <th class="col-actions"></th>
+          </tr>
+        </thead>
+        <tbody id="ledger-body">
+          <!-- linhas inseridas via JS -->
+        </tbody>
+      </table>
+      <p class="empty-state" id="empty-state" hidden>
+        Nenhum lançamento ainda. Clique em <strong>+ Novo lançamento</strong> para abrir a primeira linha do seu planner.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================== GRÁFICOS ============================== -->
+  <section class="charts-section">
+    <div class="chart-card chart-card--wide">
+      <div class="chart-card-head">
+        <span class="section-eyebrow">Evolução mensal</span>
+        <h3>Ganhos, gastos e economia</h3>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas id="monthly-chart"></canvas>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-card-head">
+        <span class="section-eyebrow">Para onde foi o dinheiro</span>
+        <h3>Gastos por categoria</h3>
+      </div>
+      <div class="chart-canvas-wrap chart-canvas-wrap--donut">
+        <canvas id="category-chart"></canvas>
+      </div>
+      <p class="empty-state" id="category-empty" hidden>Sem gastos registrados ainda.</p>
+    </div>
+  </section>
+
+  <footer class="page-footer">
+    <p>Planner · seus dados ficam salvos localmente no arquivo <code>planner.db</code></p>
+  </footer>
+
+</div>
+
+<!-- template de linha da tabela (usado pelo JS) -->
+<template id="row-template">
+  <tr class="ledger-row">
+    <td class="col-date">
+      <input type="date" class="cell-input cell-date" />
+    </td>
+    <td class="col-desc">
+      <input type="text" class="cell-input cell-desc" placeholder="Ex: mercado, aluguel, salário..." />
+    </td>
+    <td class="col-cat">
+      <select class="cell-input cell-cat"></select>
+    </td>
+    <td class="col-type">
+      <select class="cell-input cell-type">
+        <option value="gasto">Gasto</option>
+        <option value="ganho">Ganho</option>
+      </select>
+    </td>
+    <td class="col-amount">
+      <input type="number" step="0.01" min="0" class="cell-input cell-amount" placeholder="0,00" />
+    </td>
+    <td class="col-balance">
+      <span class="cell-balance">—</span>
+    </td>
+    <td class="col-actions">
+      <button class="row-delete" title="Excluir lançamento" aria-label="Excluir lançamento">✕</button>
+    </td>
+  </tr>
+</template>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="/static/script.js"></script>
+</body>
+</html>
