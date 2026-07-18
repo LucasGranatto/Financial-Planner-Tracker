@@ -1,41 +1,45 @@
 /* ==========================================================================
    PLANNER — design tokens
-   Conceito: caderno de razão (ledger) em papel — mas com tinta viva, não
-   morta. Fundo claro em verde-água pálido, tinta quase-preta azulada, e
-   três cores de tinta bem saturadas para ganho (jade), gasto (carmim) e
-   destaque/saldo (cobalto). O elemento de assinatura é a fileira de
-   "abas de fichário" acima do livro de lançamentos, usada para navegar
-   entre meses — como as guias de um caderno de contas físico.
+   Conceito: caderno de razão (ledger) — agora em modo escuro, como um livro
+   contábil sob luz de mesa: fundo quase-preto com um leve tom verde-tinta,
+   tinta clara quase-branca, e três cores de destaque bem saturadas para
+   ganho (jade), gasto (carmim) e destaque/saldo (cobalto). O cabeçalho é
+   uma faixa cheia com textura de pauta (linhas horizontais finas, como
+   papel pautado) e um saldo ao vivo; as abas de mês acima do livro de
+   lançamentos funcionam como guias de fichário — sempre uma de cada vez,
+   sem visão "todos".
    Tipografia: Instrument Serif (display, itálico como acento) + Inter
    (corpo) + IBM Plex Mono (números e datas).
    ========================================================================== */
 
 :root {
-  --bg:            #EAF2ED;
-  --bg-elevated:   #F5F9F6;
-  --bg-card:       #FFFFFF;
-  --bg-sunken:     #DCE8E0;
-  --line:          rgba(19, 31, 34, 0.10);
-  --line-strong:   rgba(19, 31, 34, 0.22);
+  --bg:            #0B1310;
+  --bg-elevated:   #121C18;
+  --bg-card:       #16211D;
+  --bg-sunken:     #0A100D;
+  --line:          rgba(255, 255, 255, 0.08);
+  --line-strong:   rgba(255, 255, 255, 0.16);
 
-  --text:          #131F22;
-  --text-muted:    #52646A;
-  --text-faint:    #86969B;
+  --text:          #EDF3EF;
+  --text-muted:    #9BAAA2;
+  --text-faint:    #67766E;
 
-  --accent-ganho:      #0E9A62;
-  --accent-ganho-dim:  rgba(14, 154, 98, 0.13);
-  --accent-gasto:      #D8434B;
-  --accent-gasto-dim:  rgba(216, 67, 75, 0.13);
-  --accent-highlight:      #2A55E5;
-  --accent-highlight-dim:  rgba(42, 85, 229, 0.12);
-  --accent-gold:       #C98A28;
-  --accent-gold-dim:   rgba(201, 138, 40, 0.14);
+  --accent-ganho:      #22C382;
+  --accent-ganho-dim:  rgba(34, 195, 130, 0.16);
+  --accent-gasto:      #FF5C64;
+  --accent-gasto-dim:  rgba(255, 92, 100, 0.16);
+  --accent-highlight:      #5B82FF;
+  --accent-highlight-dim:  rgba(91, 130, 255, 0.16);
+  --accent-gold:       #F0B94A;
+  --accent-gold-dim:   rgba(240, 185, 74, 0.16);
 
   --radius-s: 6px;
   --radius-m: 10px;
   --radius-l: 16px;
 
-  --shadow-card: 0 1px 2px rgba(19,31,34,0.04), 0 8px 20px -12px rgba(19,31,34,0.18);
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.24), 0 12px 28px -16px rgba(0,0,0,0.55);
+
+  --content-max: 1360px;
 
   --font-display: 'Instrument Serif', serif;
   --font-body: 'Inter', sans-serif;
@@ -55,17 +59,17 @@ html, body {
 
 body {
   background-image:
-    radial-gradient(circle at 12% -4%, rgba(42,85,229,0.06), transparent 42%),
-    radial-gradient(circle at 92% 8%, rgba(14,154,98,0.05), transparent 40%);
+    radial-gradient(circle at 10% -6%, rgba(91,130,255,0.10), transparent 42%),
+    radial-gradient(circle at 94% 4%, rgba(34,195,130,0.07), transparent 40%);
   background-attachment: fixed;
 }
 
 ::selection { background: var(--accent-highlight-dim); color: var(--text); }
 
 .page {
-  max-width: 1080px;
+  max-width: var(--content-max);
   margin: 0 auto;
-  padding: 32px 24px 80px;
+  padding: 40px 40px 90px;
 }
 
 a { color: inherit; }
@@ -75,46 +79,99 @@ button {
   cursor: pointer;
 }
 
-/* ============================== HEADER ============================== */
+/* ============================== SITE HEADER ============================== */
+/* Faixa cheia (edge-to-edge), com textura de pauta — o "papel pautado" do
+   caderno de contas — e um saldo ao vivo, sempre visível. */
 
-.brand-bar {
+.site-header {
+  width: 100%;
+  background: var(--bg-elevated);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(255,255,255,0.035) 0,
+    rgba(255,255,255,0.035) 1px,
+    transparent 1px,
+    transparent 30px
+  );
+  border-bottom: 2px solid var(--accent-highlight);
+  box-shadow: 0 16px 36px -28px rgba(91,130,255,0.5);
+}
+
+.site-header-inner {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: 26px 40px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-bottom: 28px;
-  border-bottom: 1px solid var(--line);
-  margin-bottom: 40px;
+  gap: 24px;
+  flex-wrap: wrap;
 }
 
-.brand { display: flex; align-items: center; gap: 14px; }
+.brand { display: flex; align-items: center; gap: 16px; }
 
 .brand-mark {
   font-family: var(--font-display);
-  font-style: italic;
-  font-size: 28px;
-  width: 42px;
-  height: 42px;
+  font-size: 30px;
+  width: 52px;
+  height: 52px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-s);
-  color: #fff;
-  background: var(--accent-highlight);
+  border-radius: 12px;
+  color: var(--bg);
+  background: linear-gradient(155deg, var(--accent-highlight), #8AA3FF);
+  box-shadow: 0 6px 18px -6px rgba(91,130,255,0.6);
 }
+
+.brand-mark em { font-style: italic; color: rgba(11,19,16,0.55); }
 
 .brand-text h1 {
   font-family: var(--font-display);
-  font-size: 25px;
+  font-size: 28px;
   font-weight: 400;
   margin: 0;
   letter-spacing: 0.01em;
 }
 
 .brand-text p {
-  margin: 2px 0 0;
+  margin: 3px 0 0;
   font-size: 12.5px;
   color: var(--text-muted);
   letter-spacing: 0.01em;
+}
+
+.site-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.header-saldo-pill {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line-strong);
+}
+
+.header-saldo-label {
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-weight: 600;
+}
+
+.header-saldo-value {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-ganho);
 }
 
 .brand-date {
@@ -175,12 +232,12 @@ button {
 }
 
 .chip {
-  padding: 14px 18px;
+  padding: 14px 20px;
   border-radius: var(--radius-m);
   border: 1px solid var(--line);
   background: var(--bg-card);
   box-shadow: var(--shadow-card);
-  min-width: 140px;
+  min-width: 150px;
 }
 
 .chip-label {
@@ -201,11 +258,11 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
-.chip--ganho { border-color: rgba(14,154,98,0.35); }
+.chip--ganho { border-color: rgba(34,195,130,0.35); }
 .chip--ganho .chip-value { color: var(--accent-ganho); }
-.chip--gasto { border-color: rgba(216,67,75,0.35); }
+.chip--gasto { border-color: rgba(255,92,100,0.35); }
 .chip--gasto .chip-value { color: var(--accent-gasto); }
-.chip--economia { border-color: rgba(201,138,40,0.4); }
+.chip--economia { border-color: rgba(240,185,74,0.4); }
 .chip--economia .chip-value { color: var(--accent-gold); }
 
 /* ============================== SECTION HEAD ============================== */
@@ -252,10 +309,11 @@ button {
 .btn--primary {
   background: var(--accent-highlight);
   border-color: var(--accent-highlight);
-  color: #fff;
+  color: #0B1310;
+  font-weight: 600;
 }
 
-.btn--primary:hover { background: #2247C7; border-color: #2247C7; }
+.btn--primary:hover { background: #7C9AFF; border-color: #7C9AFF; }
 
 .btn--small {
   padding: 8px 14px;
@@ -358,8 +416,9 @@ button {
 
 /* ============================== MONTH TABS (signature element) ==============================
    Abas de fichário: cada mês vira uma "guia" acima do livro de lançamentos,
-   como as divisórias de um caderno de contas físico. A guia ativa fica
-   nivelada com a tabela; as demais recuam, como páginas por trás. */
+   como as divisórias de um caderno de contas físico. Não existe uma visão
+   "Todos" — sempre um mês por vez, com a guia ativa nivelada com a tabela
+   e as demais recuadas, como páginas por trás. */
 
 .month-tabs {
   display: flex;
@@ -455,7 +514,7 @@ button {
   vertical-align: middle;
 }
 
-.ledger-row:nth-child(even) { background: rgba(19,31,34,0.02); }
+.ledger-row:nth-child(even) { background: rgba(255,255,255,0.015); }
 .ledger-row:hover { background: var(--accent-highlight-dim); }
 
 .col-amount, .col-balance { text-align: right; }
@@ -557,8 +616,8 @@ button {
   margin: 4px 0 0;
 }
 
-.chart-canvas-wrap { position: relative; height: 280px; margin-top: 12px; }
-.chart-canvas-wrap--donut { height: 240px; }
+.chart-canvas-wrap { position: relative; height: 300px; margin-top: 12px; }
+.chart-canvas-wrap--donut { height: 260px; }
 
 /* ============================== FOOTER ============================== */
 
@@ -577,6 +636,11 @@ button {
 
 /* ============================== RESPONSIVE ============================== */
 
+@media (max-width: 1100px) {
+  .page { padding: 32px 24px 80px; }
+  .site-header-inner { padding: 22px 24px; }
+}
+
 @media (max-width: 860px) {
   .charts-section { grid-template-columns: 1fr; }
   .categories-columns { grid-template-columns: 1fr; }
@@ -586,6 +650,7 @@ button {
   .hero { flex-direction: column; align-items: flex-start; }
   .ledger-table-wrap { overflow-x: auto; }
   .ledger-table { min-width: 640px; }
+  .site-header-inner { flex-direction: column; align-items: flex-start; }
 }
 
 @media (prefers-reduced-motion: reduce) {
