@@ -23,6 +23,12 @@ const el = {
   ganhoCategoryForm: document.getElementById("ganho-category-form"),
   gastoCategoryForm: document.getElementById("gasto-category-form"),
   monthTabs: document.getElementById("month-tabs"),
+  addGoalBtn: document.getElementById("add-goal-btn"),
+  goalAddForm: document.getElementById("goal-add-form"),
+  goalCancelBtn: document.getElementById("goal-cancel-btn"),
+  goalsGrid: document.getElementById("goals-grid"),
+  goalsEmpty: document.getElementById("goals-empty"),
+  goalCardTemplate: document.getElementById("goal-card-template"),
 };
 
 let monthlyChart = null;
@@ -37,6 +43,11 @@ let entriesCache = [];
 
 // mês selecionado nas abas ("AAAA-MM"); null até os lançamentos carregarem
 let activeMonth = null;
+
+// cache local das metas futuras + saldo atual (usado pra calcular o
+// progresso de cada meta)
+let goalsCache = [];
+let currentSaldo = 0;
 
 const currencyFmt = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -62,11 +73,22 @@ document.addEventListener("DOMContentLoaded", () => {
   el.todayLabel.textContent = capitalize(dateHeaderFmt.format(new Date()));
 
   loadCategories().then(loadEntries);
+  loadGoals();
 
   el.addRowBtn.addEventListener("click", () => createBlankRow());
   el.toggleCategoriesBtn.addEventListener("click", toggleCategoriesPanel);
   el.ganhoCategoryForm.addEventListener("submit", (e) => submitNewCategory(e, "ganho"));
   el.gastoCategoryForm.addEventListener("submit", (e) => submitNewCategory(e, "gasto"));
+
+  el.addGoalBtn.addEventListener("click", () => {
+    el.goalAddForm.hidden = !el.goalAddForm.hidden;
+    if (!el.goalAddForm.hidden) el.goalAddForm.querySelector(".goal-add-name").focus();
+  });
+  el.goalCancelBtn.addEventListener("click", () => {
+    el.goalAddForm.reset();
+    el.goalAddForm.hidden = true;
+  });
+  el.goalAddForm.addEventListener("submit", submitNewGoal);
 });
 
 function capitalize(str) {
@@ -191,6 +213,105 @@ function refreshAllRowCategorySelects() {
     const type = row.dataset.type;
     populateCategorySelect(catSelect, type, catSelect.value);
   });
+}
+
+// ----------------------------------------------------------------------------
+// Metas futuras
+// ----------------------------------------------------------------------------
+
+async function loadGoals() {
+  try {
+    const res = await fetch(`${API}/goals`);
+    goalsCache = await res.json();
+    renderGoals();
+  } catch (err) {
+    console.error("Falha ao carregar metas", err);
+  }
+}
+
+// O progresso de cada meta é calculado a partir do saldo acumulado atual —
+// uma aproximação simples e transparente de "quanto você já tem guardado".
+function renderGoals() {
+  el.goalsGrid.innerHTML = "";
+  el.goalsEmpty.hidden = goalsCache.length > 0;
+
+  for (const goal of goalsCache) {
+    const card = buildGoalCard(goal);
+    el.goalsGrid.appendChild(card);
+  }
+}
+
+function buildGoalCard(goal) {
+  const fragment = el.goalCardTemplate.content.cloneNode(true);
+  const card = fragment.querySelector(".goal-card");
+
+  const saldoAtual = Math.max(currentSaldo, 0);
+  const pct = goal.target_amount > 0
+    ? Math.min(100, (saldoAtual / goal.target_amount) * 100)
+    : 0;
+  const complete = saldoAtual >= goal.target_amount;
+
+  card.querySelector(".goal-name").textContent = goal.name;
+  card.querySelector(".goal-current").textContent = formatCurrency(saldoAtual);
+  card.querySelector(".goal-target").textContent = `de ${formatCurrency(goal.target_amount)}`;
+
+  const fill = card.querySelector(".goal-progress-fill");
+  fill.style.width = `${pct}%`;
+  fill.classList.toggle("is-complete", complete);
+
+  const label = card.querySelector(".goal-progress-label");
+  label.textContent = complete
+    ? "Meta atingida! 🎉"
+    : `${pct.toFixed(0)}% · faltam ${formatCurrency(goal.target_amount - saldoAtual)}`;
+
+  const dateBadge = card.querySelector(".goal-date-badge");
+  if (goal.target_date) {
+    const [y, m, d] = goal.target_date.split("-");
+    dateBadge.textContent = `${d}/${m}/${y.slice(2)}`;
+  } else {
+    dateBadge.remove();
+  }
+
+  card.querySelector(".goal-delete").addEventListener("click", () => deleteGoal(goal.id));
+
+  return fragment;
+}
+
+async function submitNewGoal(event) {
+  event.preventDefault();
+  const form = event.target;
+  const name = form.querySelector(".goal-add-name").value.trim();
+  const amount = parseFloat(form.querySelector(".goal-add-amount").value || "0");
+  const date = form.querySelector(".goal-add-date").value || null;
+
+  try {
+    const res = await fetch(`${API}/goals`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, target_amount: amount, target_date: date }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert((data.errors && data.errors[0]) || "Não foi possível criar a meta.");
+      return;
+    }
+    form.reset();
+    form.hidden = true;
+    await loadGoals();
+  } catch (err) {
+    console.error(err);
+    alert("Não foi possível criar a meta. Verifique se o backend está rodando.");
+  }
+}
+
+async function deleteGoal(id) {
+  if (!confirm("Excluir esta meta?")) return;
+  try {
+    await fetch(`${API}/goals/${id}`, { method: "DELETE" });
+    await loadGoals();
+  } catch (err) {
+    console.error(err);
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -432,29 +553,24 @@ async function loadSummary() {
 }
 
 function renderStats(data) {
+  currentSaldo = data.saldo;
+
   el.saldoTotal.textContent = formatCurrency(data.saldo);
   el.saldoTotal.style.color = data.saldo < 0 ? "var(--accent-gasto)" : "var(--text)";
   el.totalGanhos.textContent = formatCurrency(data.total_ganhos);
   el.totalGastos.textContent = formatCurrency(data.total_gastos);
 
-  const headerSaldo = document.getElementById("header-saldo-value");
-  if (headerSaldo) {
-    headerSaldo.textContent = formatCurrency(data.saldo);
-    headerSaldo.style.color = data.saldo < 0 ? "var(--accent-gasto)" : "var(--accent-ganho)";
-  }
-
   const taxa = data.total_ganhos > 0
     ? (data.saldo / data.total_ganhos) * 100
     : 0;
   el.taxaEconomia.textContent = `${taxa.toFixed(1)}%`;
+
+  renderGoals();
 }
 
 function monthLabel(monthKey) {
   const [year, month] = monthKey.split("-");
-  const date = new Date(Number(year), Number(month) - 1, 1);
-  return capitalize(
-    new Intl.DateTimeFormat("pt-BR", { month: "short", year: "2-digit" }).format(date)
-  );
+  return `${month}/${year.slice(2)}`;
 }
 
 // Gráfico redesenhado: em vez de barras agrupadas + linha em eixo duplo
@@ -485,119 +601,3 @@ function renderMonthlyChart(monthly) {
           stack: "fluxo",
         },
         {
-          type: "bar",
-          label: "Gastos",
-          data: gastosNegativos,
-          backgroundColor: "rgba(255,92,100,0.7)",
-          borderRadius: 4,
-          order: 2,
-          stack: "fluxo",
-        },
-        {
-          type: "line",
-          label: "Saldo acumulado",
-          data: saldoAcumulado,
-          borderColor: "#5B82FF",
-          backgroundColor: "#5B82FF",
-          tension: 0.3,
-          pointRadius: 3,
-          pointBackgroundColor: "#5B82FF",
-          borderWidth: 2,
-          order: 1,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: "index", intersect: false },
-      plugins: {
-        legend: {
-          labels: { color: "#9BAAA2", font: { family: "Inter", size: 11.5 } },
-        },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => `${ctx.dataset.label}: ${formatCurrency(Math.abs(ctx.parsed.y))}`,
-          },
-        },
-      },
-      scales: {
-        x: {
-          ticks: { color: "#9BAAA2", font: { family: "IBM Plex Mono", size: 11 } },
-          grid: { display: false },
-        },
-        y: {
-          ticks: {
-            color: "#9BAAA2",
-            font: { family: "IBM Plex Mono", size: 10.5 },
-            callback: (v) => formatCurrency(Math.abs(v)),
-          },
-          grid: {
-            color: (ctx) => (ctx.tick.value === 0 ? "rgba(255,255,255,0.24)" : "rgba(255,255,255,0.06)"),
-          },
-        },
-      },
-    },
-  });
-}
-
-const DONUT_COLORS = [
-  "#FF5C64", "#5B82FF", "#F0B94A", "#22C382", "#9B87F0",
-  "#F08AAB", "#4DB8E8", "#E0913D", "#6FC7A6", "#C58BE0",
-];
-
-function renderCategoryChart(byCategory) {
-  const ctx = document.getElementById("category-chart");
-  el.categoryEmpty.hidden = byCategory.length > 0;
-  document.getElementById("category-chart").style.display =
-    byCategory.length > 0 ? "block" : "none";
-
-  if (categoryChart) categoryChart.destroy();
-  if (byCategory.length === 0) return;
-
-  categoryChart = new Chart(ctx, {
-    type: "doughnut",
-    data: {
-      labels: byCategory.map((c) => c.category),
-      datasets: [
-        {
-          data: byCategory.map((c) => c.amount),
-          backgroundColor: byCategory.map((_, i) => DONUT_COLORS[i % DONUT_COLORS.length]),
-          borderColor: "#16211D",
-          borderWidth: 2,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      cutout: "62%",
-      plugins: {
-        legend: {
-          position: "bottom",
-          labels: {
-            color: "#9BAAA2",
-            font: { family: "Inter", size: 10.5 },
-            boxWidth: 10,
-            padding: 10,
-          },
-        },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => `${ctx.label}: ${formatCurrency(ctx.parsed)}`,
-          },
-        },
-      },
-    },
-  });
-}
-
-// ----------------------------------------------------------------------------
-// Utils
-// ----------------------------------------------------------------------------
-
-function escapeHtml(str) {
-  const div = document.createElement("div");
-  div.textContent = str;
-  return div.innerHTML;
-}
