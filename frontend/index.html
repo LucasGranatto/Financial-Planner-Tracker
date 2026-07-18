@@ -6,7 +6,7 @@
 <title>Planner — Planejador Financeiro</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
@@ -31,9 +31,6 @@
       <span class="hero-eyebrow">Saldo acumulado</span>
       <div class="hero-number-wrap">
         <span class="hero-number" id="saldo-total">R$ 0,00</span>
-        <svg class="hero-underline" viewBox="0 0 320 20" preserveAspectRatio="none" aria-hidden="true">
-          <path d="M2 14 C 60 4, 110 18, 160 10 C 210 3, 260 16, 318 8" />
-        </svg>
       </div>
       <p class="hero-caption">Tudo o que entrou, menos tudo o que saiu, desde o primeiro lançamento</p>
     </div>
@@ -96,6 +93,8 @@
       <button class="btn btn--primary" id="add-row-btn">+ Novo lançamento</button>
     </div>
 
+    <div class="month-tabs" id="month-tabs"></div>
+
     <div class="ledger-table-wrap">
       <table class="ledger-table" id="ledger-table">
         <thead>
@@ -124,7 +123,7 @@
     <div class="chart-card chart-card--wide">
       <div class="chart-card-head">
         <span class="section-eyebrow">Evolução mensal</span>
-        <h3>Ganhos, gastos e economia</h3>
+        <h3>Entrou vs. saiu, mês a mês</h3>
       </div>
       <div class="chart-canvas-wrap">
         <canvas id="monthly-chart"></canvas>
