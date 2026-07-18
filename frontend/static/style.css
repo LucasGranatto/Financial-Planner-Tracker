@@ -629,7 +629,7 @@ button {
   padding: 8px 8px;
 }
 
-.cell-amount, .cell-balance {
+.cell-amount, .cell-balance, .cell-date {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
@@ -656,3 +656,101 @@ button {
 
 .cell-cat option, .cell-type option {
   background: var(--bg-card);
+  color: var(--text);
+}
+
+.ledger-row[data-type="ganho"] .cell-type { color: var(--accent-ganho); }
+.ledger-row[data-type="gasto"] .cell-type { color: var(--accent-gasto); }
+
+.cell-balance {
+  display: block;
+  padding: 8px;
+  color: var(--text-muted);
+}
+
+.row-delete {
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  font-size: 13px;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-s);
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.row-delete:hover { color: var(--accent-gasto); background: var(--accent-gasto-dim); }
+
+.empty-state {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13.5px;
+  padding: 36px 24px;
+  margin: 0;
+}
+
+/* ============================== CHARTS ============================== */
+
+.charts-section {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 20px;
+  margin-bottom: 40px;
+}
+
+.chart-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-l);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-card);
+  padding: 22px 22px 12px;
+}
+
+.chart-card-head { margin-bottom: 6px; }
+.chart-card-head h3 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 19px;
+  margin: 4px 0 0;
+}
+
+.chart-canvas-wrap { position: relative; height: 300px; margin-top: 12px; }
+.chart-canvas-wrap--donut { height: 260px; }
+
+/* ============================== FOOTER ============================== */
+
+.page-footer {
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 12px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.page-footer code {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+/* ============================== RESPONSIVE ============================== */
+
+@media (max-width: 1100px) {
+  .page { padding: 32px 24px 80px; }
+  .site-header-inner { padding: 22px 24px; }
+}
+
+@media (max-width: 860px) {
+  .charts-section { grid-template-columns: 1fr; }
+  .categories-columns { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) {
+  .hero { flex-direction: column; align-items: flex-start; }
+  .ledger-table-wrap { overflow-x: auto; }
+  .ledger-table { min-width: 640px; }
+  .site-header-inner { flex-direction: column; align-items: flex-start; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
