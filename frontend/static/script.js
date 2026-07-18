@@ -35,8 +35,8 @@ let categoriesCache = [];
 // corretamente mesmo quando uma aba de mês está filtrando a visualização)
 let entriesCache = [];
 
-// mês selecionado nas abas ("todos" ou "AAAA-MM")
-let activeMonth = "todos";
+// mês selecionado nas abas ("AAAA-MM"); null até os lançamentos carregarem
+let activeMonth = null;
 
 const currencyFmt = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -223,9 +223,10 @@ function monthKeyOf(entry) {
   return entry.date.slice(0, 7);
 }
 
-// Constrói as abas de mês a partir dos meses presentes nos lançamentos,
-// mais uma aba fixa "Todos". Cada aba mostra um ponto colorido indicando
-// se aquele mês fechou no positivo (verde) ou no negativo (vermelho).
+// Constrói as abas de mês a partir dos meses presentes nos lançamentos —
+// sem uma aba "Todos": o livro sempre mostra um mês por vez. Cada aba
+// mostra um ponto colorido indicando se aquele mês fechou no positivo
+// (verde) ou no negativo (vermelho).
 function renderMonthTabs() {
   const monthTotals = new Map(); // "AAAA-MM" -> economia do mês
   for (const entry of entriesCache) {
@@ -236,20 +237,20 @@ function renderMonthTabs() {
 
   const months = Array.from(monthTotals.keys()).sort();
 
-  // se o mês ativo não existe mais (ex: última linha daquele mês foi
-  // apagada), volta para "Todos"
-  if (activeMonth !== "todos" && !monthTotals.has(activeMonth)) {
-    activeMonth = "todos";
-  }
-
   el.monthTabs.innerHTML = "";
 
   if (months.length === 0) {
+    activeMonth = null;
     return; // nada para mostrar ainda
   }
 
-  const allTab = buildMonthTabButton("todos", "Todos", null);
-  el.monthTabs.appendChild(allTab);
+  // se o mês ativo não existe (primeira carga, ou a última linha daquele
+  // mês foi apagada), escolhe o mês atual (se houver lançamentos nele) ou
+  // cai para o mês mais recente disponível
+  if (!activeMonth || !monthTotals.has(activeMonth)) {
+    const currentKey = new Date().toISOString().slice(0, 7);
+    activeMonth = monthTotals.has(currentKey) ? currentKey : months[months.length - 1];
+  }
 
   for (const key of months) {
     const economia = monthTotals.get(key);
@@ -289,10 +290,9 @@ function renderRows() {
   el.tbody.innerHTML = "";
 
   const withBalance = entriesWithRunningBalance();
-  const visible =
-    activeMonth === "todos"
-      ? withBalance
-      : withBalance.filter(({ entry }) => monthKeyOf(entry) === activeMonth);
+  const visible = activeMonth
+    ? withBalance.filter(({ entry }) => monthKeyOf(entry) === activeMonth)
+    : [];
 
   el.emptyState.hidden = visible.length > 0;
   if (entriesCache.length > 0 && visible.length === 0) {
@@ -437,6 +437,12 @@ function renderStats(data) {
   el.totalGanhos.textContent = formatCurrency(data.total_ganhos);
   el.totalGastos.textContent = formatCurrency(data.total_gastos);
 
+  const headerSaldo = document.getElementById("header-saldo-value");
+  if (headerSaldo) {
+    headerSaldo.textContent = formatCurrency(data.saldo);
+    headerSaldo.style.color = data.saldo < 0 ? "var(--accent-gasto)" : "var(--accent-ganho)";
+  }
+
   const taxa = data.total_ganhos > 0
     ? (data.saldo / data.total_ganhos) * 100
     : 0;
@@ -473,7 +479,7 @@ function renderMonthlyChart(monthly) {
           type: "bar",
           label: "Ganhos",
           data: ganhos,
-          backgroundColor: "rgba(14,154,98,0.65)",
+          backgroundColor: "rgba(34,195,130,0.7)",
           borderRadius: 4,
           order: 2,
           stack: "fluxo",
@@ -482,7 +488,7 @@ function renderMonthlyChart(monthly) {
           type: "bar",
           label: "Gastos",
           data: gastosNegativos,
-          backgroundColor: "rgba(216,67,75,0.65)",
+          backgroundColor: "rgba(255,92,100,0.7)",
           borderRadius: 4,
           order: 2,
           stack: "fluxo",
@@ -491,11 +497,11 @@ function renderMonthlyChart(monthly) {
           type: "line",
           label: "Saldo acumulado",
           data: saldoAcumulado,
-          borderColor: "#2A55E5",
-          backgroundColor: "#2A55E5",
+          borderColor: "#5B82FF",
+          backgroundColor: "#5B82FF",
           tension: 0.3,
           pointRadius: 3,
-          pointBackgroundColor: "#2A55E5",
+          pointBackgroundColor: "#5B82FF",
           borderWidth: 2,
           order: 1,
         },
@@ -507,7 +513,7 @@ function renderMonthlyChart(monthly) {
       interaction: { mode: "index", intersect: false },
       plugins: {
         legend: {
-          labels: { color: "#52646A", font: { family: "Inter", size: 11.5 } },
+          labels: { color: "#9BAAA2", font: { family: "Inter", size: 11.5 } },
         },
         tooltip: {
           callbacks: {
@@ -517,17 +523,17 @@ function renderMonthlyChart(monthly) {
       },
       scales: {
         x: {
-          ticks: { color: "#52646A", font: { family: "IBM Plex Mono", size: 11 } },
+          ticks: { color: "#9BAAA2", font: { family: "IBM Plex Mono", size: 11 } },
           grid: { display: false },
         },
         y: {
           ticks: {
-            color: "#52646A",
+            color: "#9BAAA2",
             font: { family: "IBM Plex Mono", size: 10.5 },
             callback: (v) => formatCurrency(Math.abs(v)),
           },
           grid: {
-            color: (ctx) => (ctx.tick.value === 0 ? "rgba(19,31,34,0.28)" : "rgba(19,31,34,0.07)"),
+            color: (ctx) => (ctx.tick.value === 0 ? "rgba(255,255,255,0.24)" : "rgba(255,255,255,0.06)"),
           },
         },
       },
@@ -536,8 +542,8 @@ function renderMonthlyChart(monthly) {
 }
 
 const DONUT_COLORS = [
-  "#D8434B", "#2A55E5", "#C98A28", "#0E9A62", "#7B5FE0",
-  "#E5789A", "#3D9AD1", "#B5641F", "#5FA88A", "#9C6BC2",
+  "#FF5C64", "#5B82FF", "#F0B94A", "#22C382", "#9B87F0",
+  "#F08AAB", "#4DB8E8", "#E0913D", "#6FC7A6", "#C58BE0",
 ];
 
 function renderCategoryChart(byCategory) {
@@ -557,7 +563,7 @@ function renderCategoryChart(byCategory) {
         {
           data: byCategory.map((c) => c.amount),
           backgroundColor: byCategory.map((_, i) => DONUT_COLORS[i % DONUT_COLORS.length]),
-          borderColor: "#FFFFFF",
+          borderColor: "#16211D",
           borderWidth: 2,
         },
       ],
@@ -570,7 +576,7 @@ function renderCategoryChart(byCategory) {
         legend: {
           position: "bottom",
           labels: {
-            color: "#52646A",
+            color: "#9BAAA2",
             font: { family: "Inter", size: 10.5 },
             boxWidth: 10,
             padding: 10,
