@@ -53,31 +53,6 @@
     </div>
   </section>
 
-  <!-- ============================== METAS FUTURAS ============================== -->
-  <section class="goals-section">
-    <div class="section-head">
-      <div>
-        <span class="section-eyebrow">Planejamento</span>
-        <h2>Metas futuras</h2>
-      </div>
-      <button class="btn btn--primary" id="add-goal-btn">+ Nova meta</button>
-    </div>
-
-    <form class="goal-add-form" id="goal-add-form" hidden>
-      <input type="text" class="goal-add-input goal-add-name" placeholder="Nome da meta (ex: Viagem, Reserva de emergência)" required />
-      <input type="number" step="0.01" min="0.01" class="goal-add-input goal-add-amount" placeholder="Valor alvo (R$)" required />
-      <input type="date" class="goal-add-input goal-add-date" title="Data alvo (opcional)" />
-      <button type="submit" class="btn btn--small btn--primary">Salvar meta</button>
-      <button type="button" class="btn btn--small" id="goal-cancel-btn">Cancelar</button>
-    </form>
-
-    <div class="goals-grid" id="goals-grid"></div>
-    <p class="empty-state" id="goals-empty" hidden>
-      Nenhuma meta ainda. Clique em <strong>+ Nova meta</strong> para definir seu próximo objetivo — o
-      progresso é calculado a partir do seu saldo acumulado atual.
-    </p>
-  </section>
-
   <!-- ============================== CATEGORIAS ============================== -->
   <section class="categories-section">
     <div class="section-head">
@@ -118,6 +93,11 @@
         <h2>Seus lançamentos</h2>
       </div>
       <button class="btn btn--primary" id="add-row-btn">+ Novo lançamento</button>
+    </div>
+
+    <div class="ledger-toolbar">
+      <input type="text" class="ledger-search" id="ledger-search" placeholder="Buscar por descrição ou categoria..." />
+      <div class="month-compare" id="month-compare"></div>
     </div>
 
     <div class="month-tabs" id="month-tabs"></div>
@@ -169,6 +149,55 @@
     </div>
   </section>
 
+  <!-- ============================== METAS FUTURAS ============================== -->
+  <section class="goals-section">
+    <div class="section-head">
+      <div>
+        <span class="section-eyebrow">Planejamento</span>
+        <h2>Metas futuras</h2>
+      </div>
+      <button class="btn btn--primary" id="add-goal-btn">+ Nova meta</button>
+    </div>
+
+    <form class="goal-add-form" id="goal-add-form" hidden>
+      <input type="text" class="goal-add-input goal-add-name" placeholder="Nome da meta (ex: Viagem, Reserva de emergência)" required />
+      <input type="number" step="0.01" min="0.01" class="goal-add-input goal-add-amount" placeholder="Valor alvo (R$)" required />
+      <input type="date" class="goal-add-input goal-add-date" title="Data alvo (opcional)" />
+      <button type="submit" class="btn btn--small btn--primary">Salvar meta</button>
+      <button type="button" class="btn btn--small" id="goal-cancel-btn">Cancelar</button>
+    </form>
+
+    <div class="goals-grid" id="goals-grid"></div>
+    <p class="empty-state" id="goals-empty" hidden>
+      Nenhuma meta ainda. Clique em <strong>+ Nova meta</strong> para definir seu próximo objetivo — o
+      progresso é calculado a partir do seu saldo acumulado atual.
+    </p>
+  </section>
+
+  <!-- ============================== ORÇAMENTOS ============================== -->
+  <section class="budgets-section">
+    <div class="section-head">
+      <div>
+        <span class="section-eyebrow">Planejamento</span>
+        <h2>Orçamentos por categoria</h2>
+      </div>
+      <button class="btn btn--primary" id="add-budget-btn">+ Definir orçamento</button>
+    </div>
+
+    <form class="budget-add-form" id="budget-add-form" hidden>
+      <select class="goal-add-input budget-add-category" required></select>
+      <input type="number" step="0.01" min="0.01" class="goal-add-input budget-add-amount" placeholder="Limite mensal (R$)" required />
+      <button type="submit" class="btn btn--small btn--primary">Salvar</button>
+      <button type="button" class="btn btn--small" id="budget-cancel-btn">Cancelar</button>
+    </form>
+
+    <div class="goals-grid" id="budgets-grid"></div>
+    <p class="empty-state" id="budgets-empty" hidden>
+      Nenhum orçamento definido. Clique em <strong>+ Definir orçamento</strong> pra pôr um teto mensal
+      numa categoria de gasto — o progresso acompanha o mês selecionado no livro de lançamentos.
+    </p>
+  </section>
+
   <footer class="page-footer">
     <p>Planner · seus dados ficam salvos localmente no arquivo <code>planner.db</code></p>
   </footer>
@@ -179,10 +208,11 @@
 <template id="row-template">
   <tr class="ledger-row">
     <td class="col-date">
-      <input type="text" class="cell-input cell-date" placeholder="dd/mm/aaaa" inputmode="numeric" maxlength="10" />
+      <input type="date" class="cell-input cell-date" />
     </td>
     <td class="col-desc">
       <input type="text" class="cell-input cell-desc" placeholder="Ex: mercado, aluguel, salário..." />
+      <span class="recurring-badge" title="Lançamento recorrente" hidden>🔁</span>
     </td>
     <td class="col-cat">
       <select class="cell-input cell-cat"></select>
@@ -200,33 +230,3 @@
       <span class="cell-balance">—</span>
     </td>
     <td class="col-actions">
-      <button class="row-delete" title="Excluir lançamento" aria-label="Excluir lançamento">✕</button>
-    </td>
-  </tr>
-</template>
-
-<!-- template de card de meta (usado pelo JS) -->
-<template id="goal-card-template">
-  <div class="goal-card">
-    <div class="goal-card-head">
-      <h3 class="goal-name"></h3>
-      <button class="goal-delete" title="Excluir meta" aria-label="Excluir meta">✕</button>
-    </div>
-    <div class="goal-amounts">
-      <span class="goal-current"></span>
-      <span class="goal-target"></span>
-    </div>
-    <div class="goal-progress-track">
-      <div class="goal-progress-fill"></div>
-    </div>
-    <div class="goal-card-footer">
-      <span class="goal-progress-label"></span>
-      <span class="goal-date-badge"></span>
-    </div>
-  </div>
-</template>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-<script src="/static/script.js"></script>
-</body>
-</html>
