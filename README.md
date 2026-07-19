@@ -70,6 +70,23 @@ criado sozinho na primeira execução; para "zerar" o app, basta apagá-lo.
   "Viagens", "Bônus") e remove as que não usa. As categorias aparecem
   automaticamente no seletor de cada linha da tabela, filtradas pelo tipo
   (Ganho ou Gasto) escolhido naquela linha.
+- **Orçamentos por categoria:** clique em **+ Definir orçamento**, escolha
+  uma categoria de gasto e um limite mensal. Cada orçamento vira um card com
+  barra de progresso comparando o quanto já foi gasto naquela categoria
+  **no mês selecionado nas abas** contra o limite — fica amarela perto do
+  limite (80%+) e vermelha se estourar.
+- **Lançamentos recorrentes:** clique no ícone 🔁 de qualquer linha da
+  tabela para repeti-la automaticamente pelos próximos 12 meses (mesma
+  descrição, categoria, tipo e valor, uma ocorrência por mês). Cada
+  ocorrência gerada é uma linha independente — editar ou apagar uma não
+  afeta as outras. Clicar de novo preenche só os meses que ainda não têm
+  essa recorrência, sem duplicar.
+- **Busca:** o campo acima da tabela filtra as linhas do mês ativo por
+  descrição ou categoria, em tempo real.
+- **Comparação com o mês anterior:** ao lado da busca, uma faixa mostra
+  como o mês selecionado está indo (ganhos, gastos e economia) comparado ao
+  mês anterior com lançamentos — verde quando é uma boa notícia (ganhos ou
+  economia subindo, gastos caindo), vermelho quando não é.
 - A coluna **Saldo** mostra o saldo acumulado até aquela linha, calculado em
   ordem cronológica.
 - Os gráficos e os totais no topo (ganhos, gastos, taxa de economia, saldo
@@ -85,6 +102,7 @@ criado sozinho na primeira execução; para "zerar" o app, basta apagá-lo.
 | POST   | `/api/entries`               | cria lançamento                          |
 | PUT    | `/api/entries/<id>`          | atualiza lançamento                      |
 | DELETE | `/api/entries/<id>`          | remove lançamento                        |
+| POST   | `/api/entries/<id>/repeat`    | gera as próximas N ocorrências mensais (`{months: 11}`, padrão 11) |
 | GET    | `/api/summary`               | totais, série mensal e por categoria     |
 | GET    | `/api/categories`             | lista categorias (`?kind=ganho\|gasto`)  |
 | POST   | `/api/categories`             | cria categoria `{name, kind}`            |
@@ -93,6 +111,9 @@ criado sozinho na primeira execução; para "zerar" o app, basta apagá-lo.
 | POST   | `/api/goals`                  | cria meta `{name, target_amount, target_date?}` |
 | PUT    | `/api/goals/<id>`             | atualiza meta                            |
 | DELETE | `/api/goals/<id>`             | remove meta                              |
+| GET    | `/api/budgets`                | lista orçamentos por categoria           |
+| POST   | `/api/budgets`                | cria ou atualiza orçamento `{category, monthly_limit}` (upsert por categoria) |
+| DELETE | `/api/budgets/<id>`           | remove orçamento                         |
 
 `kind` de uma categoria pode ser `"ganho"`, `"gasto"` ou `"ambos"` (aparece
 nos dois seletores).
