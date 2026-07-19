@@ -11,6 +11,8 @@ Depois abra http://localhost:5000 no navegador.
 
 import os
 import sqlite3
+import uuid
+import calendar
 from datetime import datetime
 from flask import Flask, jsonify, request, g, send_from_directory
 
@@ -103,6 +105,23 @@ def init_db():
         """
     )
 
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS budgets (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            category      TEXT NOT NULL UNIQUE,
+            monthly_limit REAL NOT NULL DEFAULT 0
+        )
+        """
+    )
+
+    # Migração: adiciona colunas de recorrência em bancos já existentes
+    entry_cols = [r[1] for r in conn.execute("PRAGMA table_info(entries)").fetchall()]
+    if "is_recurring" not in entry_cols:
+        conn.execute("ALTER TABLE entries ADD COLUMN is_recurring INTEGER NOT NULL DEFAULT 0")
+    if "recurrence_id" not in entry_cols:
+        conn.execute("ALTER TABLE entries ADD COLUMN recurrence_id TEXT")
+
     # Migração de versões antigas: 'receita' -> 'ganho', 'despesa' -> 'gasto'
     conn.execute("UPDATE entries SET type = 'ganho' WHERE type = 'receita'")
     conn.execute("UPDATE entries SET type = 'gasto' WHERE type = 'despesa'")
@@ -131,6 +150,8 @@ def row_to_dict(row):
         "category": row["category"],
         "type": row["type"],
         "amount": row["amount"],
+        "is_recurring": bool(row["is_recurring"]),
+        "recurrence_id": row["recurrence_id"],
     }
 
 
@@ -141,6 +162,24 @@ def goal_row_to_dict(row):
         "target_amount": row["target_amount"],
         "target_date": row["target_date"],
     }
+
+
+def budget_row_to_dict(row):
+    return {
+        "id": row["id"],
+        "category": row["category"],
+        "monthly_limit": row["monthly_limit"],
+    }
+
+
+def add_months(date, months):
+    """Soma 'months' meses a uma data, ajustando o dia se o mês de destino
+    for mais curto (ex: 31/jan + 1 mês -> 28 ou 29/fev)."""
+    month_index = date.month - 1 + months
+    year = date.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(date.day, calendar.monthrange(year, month)[1])
+    return date.replace(year=year, month=month, day=day)
 
 
 def validate_payload(data, partial=False):
@@ -337,6 +376,59 @@ def delete_entry(entry_id):
     return jsonify({"ok": True})
 
 
+@app.route("/api/entries/<int:entry_id>/repeat", methods=["POST"])
+def repeat_entry(entry_id):
+    db = get_db()
+    entry = db.execute("SELECT * FROM entries WHERE id = ?", (entry_id,)).fetchone()
+    if entry is None:
+        return jsonify({"error": "Lançamento não encontrado."}), 404
+
+    data = request.get_json(silent=True) or {}
+    try:
+        months_ahead = int(data.get("months", 11))
+    except (ValueError, TypeError):
+        months_ahead = 11
+    months_ahead = max(1, min(months_ahead, 36))
+
+    recurrence_id = entry["recurrence_id"] or str(uuid.uuid4())
+    if not entry["is_recurring"] or not entry["recurrence_id"]:
+        db.execute(
+            "UPDATE entries SET is_recurring = 1, recurrence_id = ? WHERE id = ?",
+            (recurrence_id, entry_id),
+        )
+
+    base_date = datetime.strptime(entry["date"], "%Y-%m-%d")
+    created = 0
+    for i in range(1, months_ahead + 1):
+        next_date = add_months(base_date, i).strftime("%Y-%m-%d")
+        exists = db.execute(
+            "SELECT id FROM entries WHERE recurrence_id = ? AND date = ?",
+            (recurrence_id, next_date),
+        ).fetchone()
+        if exists:
+            continue
+        db.execute(
+            """
+            INSERT INTO entries
+                (date, description, category, type, amount, created_at, is_recurring, recurrence_id)
+            VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+            """,
+            (
+                next_date,
+                entry["description"],
+                entry["category"],
+                entry["type"],
+                entry["amount"],
+                datetime.utcnow().isoformat(),
+                recurrence_id,
+            ),
+        )
+        created += 1
+
+    db.commit()
+    return jsonify({"ok": True, "created": created})
+
+
 # --------------------------------------------------------------------------
 # API — Metas futuras (goals)
 # --------------------------------------------------------------------------
@@ -426,6 +518,61 @@ def delete_goal(goal_id):
     if existing is None:
         return jsonify({"error": "Meta não encontrada."}), 404
     db.execute("DELETE FROM goals WHERE id = ?", (goal_id,))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+# --------------------------------------------------------------------------
+# API — Orçamentos por categoria (budgets)
+# --------------------------------------------------------------------------
+
+@app.route("/api/budgets", methods=["GET"])
+def list_budgets():
+    db = get_db()
+    rows = db.execute("SELECT * FROM budgets ORDER BY category ASC").fetchall()
+    return jsonify([budget_row_to_dict(r) for r in rows])
+
+
+@app.route("/api/budgets", methods=["POST"])
+def create_or_update_budget():
+    data = request.get_json(force=True) or {}
+    category = (data.get("category") or "").strip()
+    if not category:
+        return jsonify({"errors": ["Selecione uma categoria."]}), 400
+    try:
+        monthly_limit = float(data.get("monthly_limit", 0))
+        if monthly_limit <= 0:
+            return jsonify({"errors": ["O orçamento deve ser maior que zero."]}), 400
+    except (ValueError, TypeError):
+        return jsonify({"errors": ["Valor do orçamento deve ser numérico."]}), 400
+
+    db = get_db()
+    existing = db.execute("SELECT id FROM budgets WHERE category = ?", (category,)).fetchone()
+    if existing:
+        db.execute(
+            "UPDATE budgets SET monthly_limit = ? WHERE id = ?",
+            (monthly_limit, existing["id"]),
+        )
+        budget_id = existing["id"]
+    else:
+        cur = db.execute(
+            "INSERT INTO budgets (category, monthly_limit) VALUES (?, ?)",
+            (category, monthly_limit),
+        )
+        budget_id = cur.lastrowid
+    db.commit()
+
+    row = db.execute("SELECT * FROM budgets WHERE id = ?", (budget_id,)).fetchone()
+    return jsonify(budget_row_to_dict(row)), 201
+
+
+@app.route("/api/budgets/<int:budget_id>", methods=["DELETE"])
+def delete_budget(budget_id):
+    db = get_db()
+    existing = db.execute("SELECT id FROM budgets WHERE id = ?", (budget_id,)).fetchone()
+    if existing is None:
+        return jsonify({"error": "Orçamento não encontrado."}), 404
+    db.execute("DELETE FROM budgets WHERE id = ?", (budget_id,))
     db.commit()
     return jsonify({"ok": True})
 
