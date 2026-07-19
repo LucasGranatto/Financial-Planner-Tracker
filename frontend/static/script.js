@@ -29,6 +29,14 @@ const el = {
   goalsGrid: document.getElementById("goals-grid"),
   goalsEmpty: document.getElementById("goals-empty"),
   goalCardTemplate: document.getElementById("goal-card-template"),
+  ledgerSearch: document.getElementById("ledger-search"),
+  monthCompare: document.getElementById("month-compare"),
+  addBudgetBtn: document.getElementById("add-budget-btn"),
+  budgetAddForm: document.getElementById("budget-add-form"),
+  budgetCancelBtn: document.getElementById("budget-cancel-btn"),
+  budgetsGrid: document.getElementById("budgets-grid"),
+  budgetsEmpty: document.getElementById("budgets-empty"),
+  budgetCardTemplate: document.getElementById("budget-card-template"),
 };
 
 let monthlyChart = null;
@@ -49,6 +57,16 @@ let activeMonth = null;
 let goalsCache = [];
 let currentSaldo = 0;
 
+// cache local dos orçamentos por categoria
+let budgetsCache = [];
+
+// texto de busca ativo no livro de lançamentos (filtra por descrição/categoria)
+let searchQuery = "";
+
+// série mensal (ganhos/gastos/economia por mês) da última carga do resumo,
+// usada pra comparar o mês ativo com o mês anterior
+let monthlySeriesCache = [];
+
 const currencyFmt = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
@@ -65,40 +83,6 @@ function formatCurrency(value) {
   return currencyFmt.format(value || 0);
 }
 
-// A API sempre fala em AAAA-MM-DD (ISO); a tabela mostra e edita no
-// formato brasileiro dd/mm/aaaa. Essas duas funções fazem a ponte.
-function formatDateDisplay(isoDate) {
-  if (!isoDate) return "";
-  const [year, month, day] = isoDate.split("-");
-  return `${day}/${month}/${year}`;
-}
-
-function parseDateDisplay(displayDate) {
-  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec((displayDate || "").trim());
-  if (!match) return null;
-  const [, day, month, year] = match;
-  const iso = `${year}-${month}-${day}`;
-  const date = new Date(`${iso}T00:00:00`);
-  const valid =
-    date.getUTCFullYear() === Number(year) &&
-    date.getUTCMonth() + 1 === Number(month) &&
-    date.getUTCDate() === Number(day);
-  return valid ? iso : null;
-}
-
-// Adiciona as barras "/" conforme a pessoa digita, sem precisar digitá-las
-// (dd -> dd/ -> dd/mm -> dd/mm/ -> dd/mm/aaaa).
-function maskDateInput(event) {
-  const digits = event.target.value.replace(/\D/g, "").slice(0, 8);
-  let formatted = digits;
-  if (digits.length > 4) {
-    formatted = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 8)}`;
-  } else if (digits.length > 2) {
-    formatted = `${digits.slice(0, 2)}/${digits.slice(2, 4)}`;
-  }
-  event.target.value = formatted;
-}
-
 // ----------------------------------------------------------------------------
 // Inicialização
 // ----------------------------------------------------------------------------
@@ -108,6 +92,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   loadCategories().then(loadEntries);
   loadGoals();
+  loadBudgets();
 
   el.addRowBtn.addEventListener("click", () => createBlankRow());
   el.toggleCategoriesBtn.addEventListener("click", toggleCategoriesPanel);
@@ -123,6 +108,27 @@ document.addEventListener("DOMContentLoaded", () => {
     el.goalAddForm.hidden = true;
   });
   el.goalAddForm.addEventListener("submit", submitNewGoal);
+
+  el.addBudgetBtn.addEventListener("click", () => {
+    el.budgetAddForm.hidden = !el.budgetAddForm.hidden;
+    if (!el.budgetAddForm.hidden) {
+      populateCategorySelect(
+        el.budgetAddForm.querySelector(".budget-add-category"),
+        "gasto",
+        null
+      );
+    }
+  });
+  el.budgetCancelBtn.addEventListener("click", () => {
+    el.budgetAddForm.reset();
+    el.budgetAddForm.hidden = true;
+  });
+  el.budgetAddForm.addEventListener("submit", submitNewBudget);
+
+  el.ledgerSearch.addEventListener("input", (e) => {
+    searchQuery = e.target.value.trim().toLowerCase();
+    renderRows();
+  });
 });
 
 function capitalize(str) {
@@ -349,6 +355,108 @@ async function deleteGoal(id) {
 }
 
 // ----------------------------------------------------------------------------
+// Orçamentos por categoria
+// ----------------------------------------------------------------------------
+
+async function loadBudgets() {
+  try {
+    const res = await fetch(`${API}/budgets`);
+    budgetsCache = await res.json();
+    renderBudgets();
+  } catch (err) {
+    console.error("Falha ao carregar orçamentos", err);
+  }
+}
+
+// Quanto já foi gasto em cada categoria, só dentro do mês selecionado nas
+// abas do livro de lançamentos — os orçamentos acompanham o mês ativo.
+function spentByCategoryInActiveMonth() {
+  const spent = new Map();
+  if (!activeMonth) return spent;
+  for (const entry of entriesCache) {
+    if (entry.type !== "gasto" || monthKeyOf(entry) !== activeMonth) continue;
+    spent.set(entry.category, (spent.get(entry.category) || 0) + entry.amount);
+  }
+  return spent;
+}
+
+function renderBudgets() {
+  el.budgetsGrid.innerHTML = "";
+  el.budgetsEmpty.hidden = budgetsCache.length > 0;
+
+  const spent = spentByCategoryInActiveMonth();
+  for (const budget of budgetsCache) {
+    const card = buildBudgetCard(budget, spent.get(budget.category) || 0);
+    el.budgetsGrid.appendChild(card);
+  }
+}
+
+function buildBudgetCard(budget, spentAmount) {
+  const fragment = el.budgetCardTemplate.content.cloneNode(true);
+  const card = fragment.querySelector(".budget-card");
+
+  const pct = budget.monthly_limit > 0
+    ? Math.min(100, (spentAmount / budget.monthly_limit) * 100)
+    : 0;
+  const over = spentAmount > budget.monthly_limit;
+  const warning = !over && pct >= 80;
+
+  card.querySelector(".budget-category").textContent = budget.category;
+  card.querySelector(".budget-spent").textContent = formatCurrency(spentAmount);
+  card.querySelector(".budget-limit").textContent = `de ${formatCurrency(budget.monthly_limit)}`;
+
+  const fill = card.querySelector(".budget-progress-fill");
+  fill.style.width = `${pct}%`;
+  fill.classList.toggle("is-warning", warning);
+  fill.classList.toggle("is-over", over);
+
+  const label = card.querySelector(".budget-progress-label");
+  label.textContent = over
+    ? `Estourou em ${formatCurrency(spentAmount - budget.monthly_limit)}`
+    : `${pct.toFixed(0)}% do orçamento do mês`;
+
+  card.querySelector(".budget-delete").addEventListener("click", () => deleteBudget(budget.id));
+
+  return fragment;
+}
+
+async function submitNewBudget(event) {
+  event.preventDefault();
+  const form = event.target;
+  const category = form.querySelector(".budget-add-category").value;
+  const limit = parseFloat(form.querySelector(".budget-add-amount").value || "0");
+
+  try {
+    const res = await fetch(`${API}/budgets`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category, monthly_limit: limit }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert((data.errors && data.errors[0]) || "Não foi possível salvar o orçamento.");
+      return;
+    }
+    form.reset();
+    form.hidden = true;
+    await loadBudgets();
+  } catch (err) {
+    console.error(err);
+    alert("Não foi possível salvar o orçamento. Verifique se o backend está rodando.");
+  }
+}
+
+async function deleteBudget(id) {
+  if (!confirm("Remover este orçamento?")) return;
+  try {
+    await fetch(`${API}/budgets/${id}`, { method: "DELETE" });
+    await loadBudgets();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+// ----------------------------------------------------------------------------
 // Carregar e renderizar lançamentos
 // ----------------------------------------------------------------------------
 
@@ -436,6 +544,7 @@ function buildMonthTabButton(key, label, dotClass) {
     activeMonth = key;
     renderMonthTabs();
     renderRows();
+    renderMonthCompare();
   });
 
   return btn;
@@ -445,12 +554,21 @@ function renderRows() {
   el.tbody.innerHTML = "";
 
   const withBalance = entriesWithRunningBalance();
-  const visible = activeMonth
+  let visible = activeMonth
     ? withBalance.filter(({ entry }) => monthKeyOf(entry) === activeMonth)
     : [];
 
+  if (searchQuery) {
+    visible = visible.filter(({ entry }) =>
+      entry.description.toLowerCase().includes(searchQuery) ||
+      entry.category.toLowerCase().includes(searchQuery)
+    );
+  }
+
   el.emptyState.hidden = visible.length > 0;
-  if (entriesCache.length > 0 && visible.length === 0) {
+  if (searchQuery && visible.length === 0) {
+    el.emptyState.textContent = "Nenhum lançamento encontrado pra essa busca.";
+  } else if (entriesCache.length > 0 && visible.length === 0) {
     el.emptyState.textContent = "Nenhum lançamento neste mês.";
   } else {
     el.emptyState.innerHTML =
@@ -461,6 +579,8 @@ function renderRows() {
     const row = buildRow(entry, balance);
     el.tbody.appendChild(row);
   }
+
+  renderBudgets();
 }
 
 function buildRow(entry, runningBalance) {
@@ -475,9 +595,11 @@ function buildRow(entry, runningBalance) {
   const typeSelect = tr.querySelector(".cell-type");
   const amountInput = tr.querySelector(".cell-amount");
   const balanceSpan = tr.querySelector(".cell-balance");
+  const recurringBadge = tr.querySelector(".recurring-badge");
+  const repeatBtn = tr.querySelector(".row-repeat");
   const deleteBtn = tr.querySelector(".row-delete");
 
-  dateInput.value = formatDateDisplay(entry.date);
+  dateInput.value = entry.date;
   descInput.value = entry.description;
   typeSelect.value = entry.type;
   populateCategorySelect(catSelect, entry.type, entry.category);
@@ -486,24 +608,20 @@ function buildRow(entry, runningBalance) {
   balanceSpan.style.color =
     runningBalance < 0 ? "var(--accent-gasto)" : "var(--text-muted)";
 
-  dateInput.addEventListener("input", maskDateInput);
+  recurringBadge.hidden = !entry.is_recurring;
+  repeatBtn.classList.toggle("is-active", entry.is_recurring);
+  repeatBtn.title = entry.is_recurring
+    ? "Já repete todo mês"
+    : "Repetir todo mês";
+  repeatBtn.addEventListener("click", () => repeatEntry(entry.id, entry.is_recurring));
 
-  const commit = () => {
-    const isoDate = parseDateDisplay(dateInput.value);
-    if (!isoDate) {
-      alert("Data inválida. Use o formato dd/mm/aaaa.");
-      dateInput.value = formatDateDisplay(entry.date);
-      dateInput.focus();
-      return;
-    }
-    saveRow(tr, {
-      date: isoDate,
-      description: descInput.value,
-      category: catSelect.value,
-      type: typeSelect.value,
-      amount: parseFloat(amountInput.value || "0"),
-    });
-  };
+  const commit = () => saveRow(tr, {
+    date: dateInput.value,
+    description: descInput.value,
+    category: catSelect.value,
+    type: typeSelect.value,
+    amount: parseFloat(amountInput.value || "0"),
+  });
 
   [dateInput, descInput, catSelect, amountInput].forEach((input) =>
     input.addEventListener("change", commit)
@@ -575,6 +693,26 @@ async function deleteRow(tr) {
   }
 }
 
+async function repeatEntry(id, alreadyRecurring) {
+  const message = alreadyRecurring
+    ? "Esse lançamento já repete todo mês. Gerar novamente os próximos 12 meses (preenchendo meses que ainda não têm essa recorrência)?"
+    : "Repetir esse lançamento todo mês pelos próximos 12 meses?";
+  if (!confirm(message)) return;
+
+  try {
+    const res = await fetch(`${API}/entries/${id}/repeat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ months: 11 }),
+    });
+    if (!res.ok) throw new Error("Erro ao repetir lançamento");
+    await loadEntries();
+  } catch (err) {
+    console.error(err);
+    alert("Não foi possível repetir o lançamento. Verifique se o backend está rodando.");
+  }
+}
+
 function focusLastRowDescription() {
   const rows = el.tbody.querySelectorAll(".ledger-row");
   const last = rows[rows.length - 1];
@@ -589,9 +727,11 @@ async function loadSummary() {
   try {
     const res = await fetch(`${API}/summary`);
     const data = await res.json();
+    monthlySeriesCache = data.monthly;
     renderStats(data);
     renderMonthlyChart(data.monthly);
     renderCategoryChart(data.by_category);
+    renderMonthCompare();
   } catch (err) {
     console.error("Falha ao carregar resumo", err);
   }
@@ -618,147 +758,7 @@ function monthLabel(monthKey) {
   return `${month}/${year.slice(2)}`;
 }
 
-// Gráfico redesenhado: em vez de barras agrupadas + linha em eixo duplo
-// (difícil de comparar de relance), ganhos sobem a partir do zero e gastos
-// descem a partir do zero — a "forma" do mês aparece num único olhar.
-// O saldo acumulado vira uma linha fina no mesmo eixo, mostrando a
-// tendência por cima das barras.
-function renderMonthlyChart(monthly) {
-  const ctx = document.getElementById("monthly-chart");
-  const labels = monthly.map((m) => monthLabel(m.month));
-  const ganhos = monthly.map((m) => m.ganhos);
-  const gastosNegativos = monthly.map((m) => -m.gastos);
-  const saldoAcumulado = monthly.map((m) => m.saldo_acumulado);
-
-  if (monthlyChart) monthlyChart.destroy();
-
-  monthlyChart = new Chart(ctx, {
-    data: {
-      labels,
-      datasets: [
-        {
-          type: "bar",
-          label: "Ganhos",
-          data: ganhos,
-          backgroundColor: "rgba(34,195,130,0.7)",
-          borderRadius: 4,
-          order: 2,
-          stack: "fluxo",
-        },
-        {
-          type: "bar",
-          label: "Gastos",
-          data: gastosNegativos,
-          backgroundColor: "rgba(255,92,100,0.7)",
-          borderRadius: 4,
-          order: 2,
-          stack: "fluxo",
-        },
-        {
-          type: "line",
-          label: "Saldo acumulado",
-          data: saldoAcumulado,
-          borderColor: "#5B82FF",
-          backgroundColor: "#5B82FF",
-          tension: 0.3,
-          pointRadius: 3,
-          pointBackgroundColor: "#5B82FF",
-          borderWidth: 2,
-          order: 1,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: "index", intersect: false },
-      plugins: {
-        legend: {
-          labels: { color: "#9BAAA2", font: { family: "Inter", size: 11.5 } },
-        },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => `${ctx.dataset.label}: ${formatCurrency(Math.abs(ctx.parsed.y))}`,
-          },
-        },
-      },
-      scales: {
-        x: {
-          ticks: { color: "#9BAAA2", font: { family: "IBM Plex Mono", size: 11 } },
-          grid: { display: false },
-        },
-        y: {
-          ticks: {
-            color: "#9BAAA2",
-            font: { family: "IBM Plex Mono", size: 10.5 },
-            callback: (v) => formatCurrency(Math.abs(v)),
-          },
-          grid: {
-            color: (ctx) => (ctx.tick.value === 0 ? "rgba(255,255,255,0.24)" : "rgba(255,255,255,0.06)"),
-          },
-        },
-      },
-    },
-  });
-}
-
-const DONUT_COLORS = [
-  "#F2B84E", "#FF5C64", "#5B82FF", "#B48CFF", "#4DB8E8",
-  "#F08AAB", "#E0913D", "#8C7AE6", "#7A93E8", "#E0648B",
-];
-
-function renderCategoryChart(byCategory) {
-  const ctx = document.getElementById("category-chart");
-  el.categoryEmpty.hidden = byCategory.length > 0;
-  document.getElementById("category-chart").style.display =
-    byCategory.length > 0 ? "block" : "none";
-
-  if (categoryChart) categoryChart.destroy();
-  if (byCategory.length === 0) return;
-
-  categoryChart = new Chart(ctx, {
-    type: "doughnut",
-    data: {
-      labels: byCategory.map((c) => c.category),
-      datasets: [
-        {
-          data: byCategory.map((c) => c.amount),
-          backgroundColor: byCategory.map((_, i) => DONUT_COLORS[i % DONUT_COLORS.length]),
-          borderColor: "#151923",
-          borderWidth: 2,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      cutout: "62%",
-      plugins: {
-        legend: {
-          position: "bottom",
-          labels: {
-            color: "#9BAAA2",
-            font: { family: "Inter", size: 10.5 },
-            boxWidth: 10,
-            padding: 10,
-          },
-        },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => `${ctx.label}: ${formatCurrency(ctx.parsed)}`,
-          },
-        },
-      },
-    },
-  });
-}
-
-// ----------------------------------------------------------------------------
-// Utils
-// ----------------------------------------------------------------------------
-
-function escapeHtml(str) {
-  const div = document.createElement("div");
-  div.textContent = str;
-  return div.innerHTML;
-}
+// Compara o mês selecionado nas abas com o mês anterior (o anterior
+// cronologicamente entre os que têm lançamentos, não necessariamente o mês
+// civil seguido). Ganhos/economia: subir é bom. Gastos: subir é ruim.
+function renderMonthCompare() {
