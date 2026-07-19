@@ -1,837 +1,1048 @@
-/* ==========================================================================
-   PLANNER — design tokens
-   Conceito: caderno de razão (ledger) — agora em modo escuro, como um livro
-   contábil sob luz de mesa: fundo quase-preto com um leve tom verde-tinta,
-   tinta clara quase-branca, e três cores de destaque bem saturadas para
-   ganho (jade), gasto (carmim) e destaque/saldo (cobalto). O cabeçalho é
-   uma faixa cheia com textura de pauta (linhas horizontais finas, como
-   papel pautado) e um saldo ao vivo; as abas de mês acima do livro de
-   lançamentos funcionam como guias de fichário — sempre uma de cada vez,
-   sem visão "todos".
-   Tipografia: Instrument Serif (display, itálico como acento) + Inter
-   (corpo) + IBM Plex Mono (números e datas).
-   ========================================================================== */
+// ============================================================================
+// PLANNER — lógica de front-end
+// Tabela estilo planilha (edição inline, auto-save) + categorias + gráficos
+// ============================================================================
 
-:root {
-  --bg:            #0B0D12;
-  --bg-elevated:   #11141B;
-  --bg-card:       #151923;
-  --bg-sunken:     #08090D;
-  --line:          rgba(255, 255, 255, 0.08);
-  --line-strong:   rgba(255, 255, 255, 0.16);
+const API = "/api";
 
-  --text:          #EDEFF3;
-  --text-muted:    #9BA0AC;
-  --text-faint:    #676C78;
+const el = {
+  tbody: document.getElementById("ledger-body"),
+  emptyState: document.getElementById("empty-state"),
+  addRowBtn: document.getElementById("add-row-btn"),
+  rowTemplate: document.getElementById("row-template"),
+  saldoTotal: document.getElementById("saldo-total"),
+  totalGanhos: document.getElementById("total-ganhos"),
+  totalGastos: document.getElementById("total-gastos"),
+  taxaEconomia: document.getElementById("taxa-economia"),
+  todayLabel: document.getElementById("today-label"),
+  categoryEmpty: document.getElementById("category-empty"),
+  toggleCategoriesBtn: document.getElementById("toggle-categories-btn"),
+  categoriesPanel: document.getElementById("categories-panel"),
+  ganhoCategoryList: document.getElementById("ganho-category-list"),
+  gastoCategoryList: document.getElementById("gasto-category-list"),
+  ganhoCategoryForm: document.getElementById("ganho-category-form"),
+  gastoCategoryForm: document.getElementById("gasto-category-form"),
+  monthTabs: document.getElementById("month-tabs"),
+  addGoalBtn: document.getElementById("add-goal-btn"),
+  goalAddForm: document.getElementById("goal-add-form"),
+  goalCancelBtn: document.getElementById("goal-cancel-btn"),
+  goalsGrid: document.getElementById("goals-grid"),
+  goalsEmpty: document.getElementById("goals-empty"),
+  goalCardTemplate: document.getElementById("goal-card-template"),
+  ledgerSearch: document.getElementById("ledger-search"),
+  monthCompare: document.getElementById("month-compare"),
+  addBudgetBtn: document.getElementById("add-budget-btn"),
+  budgetAddForm: document.getElementById("budget-add-form"),
+  budgetCancelBtn: document.getElementById("budget-cancel-btn"),
+  budgetsGrid: document.getElementById("budgets-grid"),
+  budgetsEmpty: document.getElementById("budgets-empty"),
+  budgetCardTemplate: document.getElementById("budget-card-template"),
+};
 
-  --accent-ganho:      #22C382;
-  --accent-ganho-dim:  rgba(34, 195, 130, 0.16);
-  --accent-gasto:      #FF5C64;
-  --accent-gasto-dim:  rgba(255, 92, 100, 0.16);
-  --accent-highlight:      #5B82FF;
-  --accent-highlight-dim:  rgba(91, 130, 255, 0.16);
-  --accent-violet:       #B48CFF;
-  --accent-violet-dim:   rgba(180, 140, 255, 0.16);
+let monthlyChart = null;
+let categoryChart = null;
 
-  --radius-s: 6px;
-  --radius-m: 10px;
-  --radius-l: 16px;
+// cache local das categorias, atualizada sempre que a lista muda
+let categoriesCache = [];
 
-  --shadow-card: 0 1px 2px rgba(0,0,0,0.24), 0 12px 28px -16px rgba(0,0,0,0.55);
+// cache local de todos os lançamentos (para calcular saldo corrente
+// corretamente mesmo quando uma aba de mês está filtrando a visualização)
+let entriesCache = [];
 
-  --content-max: 1360px;
+// mês selecionado nas abas ("AAAA-MM"); null até os lançamentos carregarem
+let activeMonth = null;
 
-  --font-display: 'Newsreader', serif;
-  --font-body: 'Work Sans', sans-serif;
-  --font-mono: 'IBM Plex Mono', monospace;
+// cache local das metas futuras + saldo atual (usado pra calcular o
+// progresso de cada meta)
+let goalsCache = [];
+let currentSaldo = 0;
+
+// cache local dos orçamentos por categoria
+let budgetsCache = [];
+
+// texto de busca ativo no livro de lançamentos (filtra por descrição/categoria)
+let searchQuery = "";
+
+// série mensal (ganhos/gastos/economia por mês) da última carga do resumo,
+// usada pra comparar o mês ativo com o mês anterior
+let monthlySeriesCache = [];
+
+const currencyFmt = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+});
+
+const dateHeaderFmt = new Intl.DateTimeFormat("pt-BR", {
+  weekday: "long",
+  day: "2-digit",
+  month: "long",
+  year: "numeric",
+});
+
+function formatCurrency(value) {
+  return currencyFmt.format(value || 0);
 }
 
-* { box-sizing: border-box; }
-
-html, body {
-  margin: 0;
-  padding: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font-body);
-  -webkit-font-smoothing: antialiased;
+// A API sempre fala em AAAA-MM-DD (ISO); a coluna de data mostra e edita
+// no formato brasileiro dd/mm/aa (ano com 2 dígitos, igual às abas de mês).
+function formatDateDisplay(isoDate) {
+  if (!isoDate) return "";
+  const [year, month, day] = isoDate.split("-");
+  return `${day}/${month}/${year.slice(2)}`;
 }
 
-body {
-  background-image:
-    radial-gradient(circle at 10% -6%, rgba(91,130,255,0.10), transparent 42%),
-    radial-gradient(circle at 94% 4%, rgba(180,140,255,0.08), transparent 40%);
-  background-attachment: fixed;
+function parseDateDisplay(displayDate) {
+  const match = /^(\d{2})\/(\d{2})\/(\d{2})$/.exec((displayDate || "").trim());
+  if (!match) return null;
+  const [, day, month, shortYear] = match;
+  const year = `20${shortYear}`;
+  const iso = `${year}-${month}-${day}`;
+  const date = new Date(`${iso}T00:00:00`);
+  const valid =
+    date.getUTCFullYear() === Number(year) &&
+    date.getUTCMonth() + 1 === Number(month) &&
+    date.getUTCDate() === Number(day);
+  return valid ? iso : null;
 }
 
-::selection { background: var(--accent-highlight-dim); color: var(--text); }
+// Adiciona as barras "/" conforme a pessoa digita (dd -> dd/ -> dd/mm ->
+// dd/mm/ -> dd/mm/aa), preservando a posição do cursor pra não atrapalhar
+// quem está corrigindo um dígito no meio do campo.
+function maskDateInput(event) {
+  const input = event.target;
+  const prevLength = input.value.length;
+  const cursorPos = input.selectionStart;
 
-.page {
-  max-width: var(--content-max);
-  margin: 0 auto;
-  padding: 40px 40px 90px;
+  const digits = input.value.replace(/\D/g, "").slice(0, 6);
+  let formatted = digits;
+  if (digits.length > 4) {
+    formatted = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 6)}`;
+  } else if (digits.length > 2) {
+    formatted = `${digits.slice(0, 2)}/${digits.slice(2, 4)}`;
+  }
+
+  input.value = formatted;
+  const newPos = Math.max(0, cursorPos + (formatted.length - prevLength));
+  input.setSelectionRange(newPos, newPos);
 }
 
-a { color: inherit; }
-
-button {
-  font-family: var(--font-body);
-  cursor: pointer;
+// Abre o seletor de data nativo do navegador (o calendário) a partir de um
+// input[type=date] escondido, usado só como "motor" do calendário.
+function openDatePicker(nativeInput) {
+  if (typeof nativeInput.showPicker === "function") {
+    try {
+      nativeInput.showPicker();
+      return;
+    } catch (err) {
+      // alguns navegadores recusam showPicker em certas condições; cai
+      // pro fallback abaixo
+    }
+  }
+  nativeInput.focus();
 }
 
-/* ============================== SITE HEADER ============================== */
-/* Faixa cheia (edge-to-edge), com textura de pauta — o "papel pautado" do
-   caderno de contas — e um saldo ao vivo, sempre visível. */
+// ----------------------------------------------------------------------------
+// Inicialização
+// ----------------------------------------------------------------------------
 
-.site-header {
-  width: 100%;
-  background: var(--bg-elevated);
-  background-image: repeating-linear-gradient(
-    to bottom,
-    rgba(255,255,255,0.035) 0,
-    rgba(255,255,255,0.035) 1px,
-    transparent 1px,
-    transparent 30px
+document.addEventListener("DOMContentLoaded", () => {
+  el.todayLabel.textContent = capitalize(dateHeaderFmt.format(new Date()));
+
+  loadCategories().then(loadEntries);
+  loadGoals();
+  loadBudgets();
+
+  el.addRowBtn.addEventListener("click", () => createBlankRow());
+  el.toggleCategoriesBtn.addEventListener("click", toggleCategoriesPanel);
+  el.ganhoCategoryForm.addEventListener("submit", (e) => submitNewCategory(e, "ganho"));
+  el.gastoCategoryForm.addEventListener("submit", (e) => submitNewCategory(e, "gasto"));
+
+  el.addGoalBtn.addEventListener("click", () => {
+    el.goalAddForm.hidden = !el.goalAddForm.hidden;
+    if (!el.goalAddForm.hidden) el.goalAddForm.querySelector(".goal-add-name").focus();
+  });
+  el.goalCancelBtn.addEventListener("click", () => {
+    el.goalAddForm.reset();
+    el.goalAddForm.hidden = true;
+  });
+  el.goalAddForm.addEventListener("submit", submitNewGoal);
+
+  el.addBudgetBtn.addEventListener("click", () => {
+    el.budgetAddForm.hidden = !el.budgetAddForm.hidden;
+    if (!el.budgetAddForm.hidden) {
+      populateCategorySelect(
+        el.budgetAddForm.querySelector(".budget-add-category"),
+        "gasto",
+        null
+      );
+    }
+  });
+  el.budgetCancelBtn.addEventListener("click", () => {
+    el.budgetAddForm.reset();
+    el.budgetAddForm.hidden = true;
+  });
+  el.budgetAddForm.addEventListener("submit", submitNewBudget);
+
+  el.ledgerSearch.addEventListener("input", (e) => {
+    searchQuery = e.target.value.trim().toLowerCase();
+    renderRows();
+  });
+});
+
+function capitalize(str) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+// ----------------------------------------------------------------------------
+// Categorias
+// ----------------------------------------------------------------------------
+
+async function loadCategories() {
+  try {
+    const res = await fetch(`${API}/categories`);
+    categoriesCache = await res.json();
+    renderCategoryPanel();
+    refreshAllRowCategorySelects();
+  } catch (err) {
+    console.error("Falha ao carregar categorias", err);
+  }
+}
+
+function categoriesForKind(kind) {
+  // categorias específicas do tipo + categorias marcadas como "ambos"
+  return categoriesCache.filter((c) => c.kind === kind || c.kind === "ambos");
+}
+
+function toggleCategoriesPanel() {
+  const isHidden = el.categoriesPanel.hidden;
+  el.categoriesPanel.hidden = !isHidden;
+  el.toggleCategoriesBtn.setAttribute("aria-expanded", String(isHidden));
+  el.toggleCategoriesBtn.textContent = isHidden
+    ? "Ocultar categorias"
+    : "Gerenciar categorias";
+}
+
+function renderCategoryPanel() {
+  renderCategoryColumn(el.ganhoCategoryList, categoriesForKind("ganho"));
+  renderCategoryColumn(el.gastoCategoryList, categoriesForKind("gasto"));
+}
+
+function renderCategoryColumn(container, categories) {
+  container.innerHTML = "";
+  if (categories.length === 0) {
+    const note = document.createElement("p");
+    note.className = "category-empty-note";
+    note.textContent = "Nenhuma categoria ainda.";
+    container.appendChild(note);
+    return;
+  }
+  for (const cat of categories) {
+    const chip = document.createElement("span");
+    chip.className = "category-chip";
+    chip.textContent = cat.name;
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.textContent = "✕";
+    removeBtn.title = `Remover categoria "${cat.name}"`;
+    removeBtn.addEventListener("click", () => deleteCategory(cat.id));
+
+    chip.appendChild(removeBtn);
+    container.appendChild(chip);
+  }
+}
+
+async function submitNewCategory(event, kind) {
+  event.preventDefault();
+  const form = event.target;
+  const input = form.querySelector(".category-add-input");
+  const name = input.value.trim();
+  if (!name) return;
+
+  try {
+    const res = await fetch(`${API}/categories`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, kind }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert((data.errors && data.errors[0]) || "Não foi possível adicionar a categoria.");
+      return;
+    }
+    input.value = "";
+    await loadCategories();
+  } catch (err) {
+    console.error(err);
+    alert("Não foi possível adicionar a categoria. Verifique se o backend está rodando.");
+  }
+}
+
+async function deleteCategory(id) {
+  if (!confirm("Remover esta categoria? Lançamentos existentes manterão o nome atual.")) return;
+  try {
+    await fetch(`${API}/categories/${id}`, { method: "DELETE" });
+    await loadCategories();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function populateCategorySelect(selectEl, kind, selectedValue) {
+  const options = categoriesForKind(kind);
+  selectEl.innerHTML = options
+    .map((c) => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`)
+    .join("");
+
+  // se o valor atual não estiver na lista (categoria digitada/legada), adiciona como opção
+  if (selectedValue && !options.some((c) => c.name === selectedValue)) {
+    const extra = document.createElement("option");
+    extra.value = selectedValue;
+    extra.textContent = selectedValue;
+    selectEl.appendChild(extra);
+  }
+  selectEl.value = selectedValue || (options[0] ? options[0].name : "");
+}
+
+function refreshAllRowCategorySelects() {
+  const rows = el.tbody.querySelectorAll(".ledger-row");
+  rows.forEach((row) => {
+    const catSelect = row.querySelector(".cell-cat");
+    const type = row.dataset.type;
+    populateCategorySelect(catSelect, type, catSelect.value);
+  });
+}
+
+// ----------------------------------------------------------------------------
+// Metas futuras
+// ----------------------------------------------------------------------------
+
+async function loadGoals() {
+  try {
+    const res = await fetch(`${API}/goals`);
+    goalsCache = await res.json();
+    renderGoals();
+  } catch (err) {
+    console.error("Falha ao carregar metas", err);
+  }
+}
+
+// O progresso de cada meta é calculado a partir do saldo acumulado atual —
+// uma aproximação simples e transparente de "quanto você já tem guardado".
+function renderGoals() {
+  el.goalsGrid.innerHTML = "";
+  el.goalsEmpty.hidden = goalsCache.length > 0;
+
+  for (const goal of goalsCache) {
+    const card = buildGoalCard(goal);
+    el.goalsGrid.appendChild(card);
+  }
+}
+
+function buildGoalCard(goal) {
+  const fragment = el.goalCardTemplate.content.cloneNode(true);
+  const card = fragment.querySelector(".goal-card");
+
+  const saldoAtual = Math.max(currentSaldo, 0);
+  const pct = goal.target_amount > 0
+    ? Math.min(100, (saldoAtual / goal.target_amount) * 100)
+    : 0;
+  const complete = saldoAtual >= goal.target_amount;
+
+  card.querySelector(".goal-name").textContent = goal.name;
+  card.querySelector(".goal-current").textContent = formatCurrency(saldoAtual);
+  card.querySelector(".goal-target").textContent = `de ${formatCurrency(goal.target_amount)}`;
+
+  const fill = card.querySelector(".goal-progress-fill");
+  fill.style.width = `${pct}%`;
+  fill.classList.toggle("is-complete", complete);
+
+  const label = card.querySelector(".goal-progress-label");
+  label.textContent = complete
+    ? "Meta atingida! 🎉"
+    : `${pct.toFixed(0)}% · faltam ${formatCurrency(goal.target_amount - saldoAtual)}`;
+
+  const dateBadge = card.querySelector(".goal-date-badge");
+  if (goal.target_date) {
+    const [y, m, d] = goal.target_date.split("-");
+    dateBadge.textContent = `${d}/${m}/${y.slice(2)}`;
+  } else {
+    dateBadge.remove();
+  }
+
+  card.querySelector(".goal-delete").addEventListener("click", () => deleteGoal(goal.id));
+
+  return fragment;
+}
+
+async function submitNewGoal(event) {
+  event.preventDefault();
+  const form = event.target;
+  const name = form.querySelector(".goal-add-name").value.trim();
+  const amount = parseFloat(form.querySelector(".goal-add-amount").value || "0");
+  const date = form.querySelector(".goal-add-date").value || null;
+
+  try {
+    const res = await fetch(`${API}/goals`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, target_amount: amount, target_date: date }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert((data.errors && data.errors[0]) || "Não foi possível criar a meta.");
+      return;
+    }
+    form.reset();
+    form.hidden = true;
+    await loadGoals();
+  } catch (err) {
+    console.error(err);
+    alert("Não foi possível criar a meta. Verifique se o backend está rodando.");
+  }
+}
+
+async function deleteGoal(id) {
+  if (!confirm("Excluir esta meta?")) return;
+  try {
+    await fetch(`${API}/goals/${id}`, { method: "DELETE" });
+    await loadGoals();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Orçamentos por categoria
+// ----------------------------------------------------------------------------
+
+async function loadBudgets() {
+  try {
+    const res = await fetch(`${API}/budgets`);
+    budgetsCache = await res.json();
+    renderBudgets();
+  } catch (err) {
+    console.error("Falha ao carregar orçamentos", err);
+  }
+}
+
+// Quanto já foi gasto em cada categoria, só dentro do mês selecionado nas
+// abas do livro de lançamentos — os orçamentos acompanham o mês ativo.
+function spentByCategoryInActiveMonth() {
+  const spent = new Map();
+  if (!activeMonth) return spent;
+  for (const entry of entriesCache) {
+    if (entry.type !== "gasto" || monthKeyOf(entry) !== activeMonth) continue;
+    spent.set(entry.category, (spent.get(entry.category) || 0) + entry.amount);
+  }
+  return spent;
+}
+
+function renderBudgets() {
+  el.budgetsGrid.innerHTML = "";
+  el.budgetsEmpty.hidden = budgetsCache.length > 0;
+
+  const spent = spentByCategoryInActiveMonth();
+  for (const budget of budgetsCache) {
+    const card = buildBudgetCard(budget, spent.get(budget.category) || 0);
+    el.budgetsGrid.appendChild(card);
+  }
+}
+
+function buildBudgetCard(budget, spentAmount) {
+  const fragment = el.budgetCardTemplate.content.cloneNode(true);
+  const card = fragment.querySelector(".budget-card");
+
+  const pct = budget.monthly_limit > 0
+    ? Math.min(100, (spentAmount / budget.monthly_limit) * 100)
+    : 0;
+  const over = spentAmount > budget.monthly_limit;
+  const warning = !over && pct >= 80;
+
+  card.querySelector(".budget-category").textContent = budget.category;
+  card.querySelector(".budget-spent").textContent = formatCurrency(spentAmount);
+  card.querySelector(".budget-limit").textContent = `de ${formatCurrency(budget.monthly_limit)}`;
+
+  const fill = card.querySelector(".budget-progress-fill");
+  fill.style.width = `${pct}%`;
+  fill.classList.toggle("is-warning", warning);
+  fill.classList.toggle("is-over", over);
+
+  const label = card.querySelector(".budget-progress-label");
+  label.textContent = over
+    ? `Estourou em ${formatCurrency(spentAmount - budget.monthly_limit)}`
+    : `${pct.toFixed(0)}% do orçamento do mês`;
+
+  card.querySelector(".budget-delete").addEventListener("click", () => deleteBudget(budget.id));
+
+  return fragment;
+}
+
+async function submitNewBudget(event) {
+  event.preventDefault();
+  const form = event.target;
+  const category = form.querySelector(".budget-add-category").value;
+  const limit = parseFloat(form.querySelector(".budget-add-amount").value || "0");
+
+  try {
+    const res = await fetch(`${API}/budgets`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category, monthly_limit: limit }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert((data.errors && data.errors[0]) || "Não foi possível salvar o orçamento.");
+      return;
+    }
+    form.reset();
+    form.hidden = true;
+    await loadBudgets();
+  } catch (err) {
+    console.error(err);
+    alert("Não foi possível salvar o orçamento. Verifique se o backend está rodando.");
+  }
+}
+
+async function deleteBudget(id) {
+  if (!confirm("Remover este orçamento?")) return;
+  try {
+    await fetch(`${API}/budgets/${id}`, { method: "DELETE" });
+    await loadBudgets();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Carregar e renderizar lançamentos
+// ----------------------------------------------------------------------------
+
+async function loadEntries() {
+  try {
+    const res = await fetch(`${API}/entries`);
+    entriesCache = await res.json();
+    renderMonthTabs();
+    renderRows();
+    loadSummary();
+  } catch (err) {
+    console.error("Falha ao carregar lançamentos", err);
+  }
+}
+
+// Calcula o saldo corrente de cada lançamento em ordem cronológica (sempre
+// sobre a lista completa) e devolve pares [entry, saldoNaquelaLinha].
+function entriesWithRunningBalance() {
+  let running = 0;
+  return entriesCache.map((entry) => {
+    running += entry.type === "ganho" ? entry.amount : -entry.amount;
+    return { entry, balance: running };
+  });
+}
+
+function monthKeyOf(entry) {
+  return entry.date.slice(0, 7);
+}
+
+// Constrói as abas de mês a partir dos meses presentes nos lançamentos —
+// sem uma aba "Todos": o livro sempre mostra um mês por vez. Cada aba
+// mostra um ponto colorido indicando se aquele mês fechou no positivo
+// (verde) ou no negativo (vermelho).
+function renderMonthTabs() {
+  const monthTotals = new Map(); // "AAAA-MM" -> economia do mês
+  for (const entry of entriesCache) {
+    const key = monthKeyOf(entry);
+    const delta = entry.type === "ganho" ? entry.amount : -entry.amount;
+    monthTotals.set(key, (monthTotals.get(key) || 0) + delta);
+  }
+
+  const months = Array.from(monthTotals.keys()).sort();
+
+  el.monthTabs.innerHTML = "";
+
+  if (months.length === 0) {
+    activeMonth = null;
+    return; // nada para mostrar ainda
+  }
+
+  // se o mês ativo não existe (primeira carga, ou a última linha daquele
+  // mês foi apagada), escolhe o mês atual (se houver lançamentos nele) ou
+  // cai para o mês mais recente disponível
+  if (!activeMonth || !monthTotals.has(activeMonth)) {
+    const currentKey = new Date().toISOString().slice(0, 7);
+    activeMonth = monthTotals.has(currentKey) ? currentKey : months[months.length - 1];
+  }
+
+  for (const key of months) {
+    const economia = monthTotals.get(key);
+    const dotClass = economia > 0 ? "up" : economia < 0 ? "down" : null;
+    const tab = buildMonthTabButton(key, monthLabel(key), dotClass);
+    el.monthTabs.appendChild(tab);
+  }
+}
+
+function buildMonthTabButton(key, label, dotClass) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "month-tab" + (key === activeMonth ? " is-active" : "");
+  btn.dataset.month = key;
+
+  if (dotClass) {
+    const dot = document.createElement("span");
+    dot.className = `month-tab-dot month-tab-dot--${dotClass}`;
+    btn.appendChild(dot);
+  }
+
+  const text = document.createElement("span");
+  text.textContent = label;
+  btn.appendChild(text);
+
+  btn.addEventListener("click", () => {
+    if (activeMonth === key) return;
+    activeMonth = key;
+    renderMonthTabs();
+    renderRows();
+    renderMonthCompare();
+  });
+
+  return btn;
+}
+
+function renderRows() {
+  el.tbody.innerHTML = "";
+
+  const withBalance = entriesWithRunningBalance();
+  let visible = activeMonth
+    ? withBalance.filter(({ entry }) => monthKeyOf(entry) === activeMonth)
+    : [];
+
+  if (searchQuery) {
+    visible = visible.filter(({ entry }) =>
+      entry.description.toLowerCase().includes(searchQuery) ||
+      entry.category.toLowerCase().includes(searchQuery)
+    );
+  }
+
+  el.emptyState.hidden = visible.length > 0;
+  if (searchQuery && visible.length === 0) {
+    el.emptyState.textContent = "Nenhum lançamento encontrado pra essa busca.";
+  } else if (entriesCache.length > 0 && visible.length === 0) {
+    el.emptyState.textContent = "Nenhum lançamento neste mês.";
+  } else {
+    el.emptyState.innerHTML =
+      "Nenhum lançamento ainda. Clique em <strong>+ Novo lançamento</strong> para abrir a primeira linha do seu planner.";
+  }
+
+  for (const { entry, balance } of visible) {
+    const row = buildRow(entry, balance);
+    el.tbody.appendChild(row);
+  }
+
+  renderBudgets();
+}
+
+function buildRow(entry, runningBalance) {
+  const fragment = el.rowTemplate.content.cloneNode(true);
+  const tr = fragment.querySelector("tr");
+  tr.dataset.id = entry.id;
+  tr.dataset.type = entry.type;
+
+  const dateInput = tr.querySelector(".cell-date");
+  const dateNativeInput = tr.querySelector(".cell-date-native");
+  const datePickerBtn = tr.querySelector(".date-picker-btn");
+  const descInput = tr.querySelector(".cell-desc");
+  const catSelect = tr.querySelector(".cell-cat");
+  const typeSelect = tr.querySelector(".cell-type");
+  const amountInput = tr.querySelector(".cell-amount");
+  const balanceSpan = tr.querySelector(".cell-balance");
+  const recurringBadge = tr.querySelector(".recurring-badge");
+  const repeatBtn = tr.querySelector(".row-repeat");
+  const deleteBtn = tr.querySelector(".row-delete");
+
+  let lastGoodDate = entry.date;
+  dateInput.value = formatDateDisplay(entry.date);
+  dateNativeInput.value = entry.date;
+  descInput.value = entry.description;
+  typeSelect.value = entry.type;
+  populateCategorySelect(catSelect, entry.type, entry.category);
+  amountInput.value = entry.amount;
+  balanceSpan.textContent = formatCurrency(runningBalance);
+  balanceSpan.style.color =
+    runningBalance < 0 ? "var(--accent-gasto)" : "var(--text-muted)";
+
+  recurringBadge.hidden = !entry.is_recurring;
+  repeatBtn.classList.toggle("is-active", entry.is_recurring);
+  repeatBtn.title = entry.is_recurring
+    ? "Já repete todo mês"
+    : "Repetir todo mês";
+  repeatBtn.addEventListener("click", () => repeatEntry(entry.id, entry.is_recurring));
+
+  const commit = () => saveRow(tr, {
+    date: lastGoodDate,
+    description: descInput.value,
+    category: catSelect.value,
+    type: typeSelect.value,
+    amount: parseFloat(amountInput.value || "0"),
+  });
+
+  dateInput.addEventListener("input", maskDateInput);
+  dateInput.addEventListener("change", () => {
+    const iso = parseDateDisplay(dateInput.value);
+    if (!iso) {
+      alert("Data inválida. Use o formato dd/mm/aa.");
+      dateInput.value = formatDateDisplay(lastGoodDate);
+      dateInput.focus();
+      return;
+    }
+    lastGoodDate = iso;
+    dateNativeInput.value = iso;
+    commit();
+  });
+  dateNativeInput.addEventListener("change", () => {
+    if (!dateNativeInput.value) return;
+    lastGoodDate = dateNativeInput.value;
+    dateInput.value = formatDateDisplay(lastGoodDate);
+    commit();
+  });
+  datePickerBtn.addEventListener("click", () => openDatePicker(dateNativeInput));
+
+  [descInput, catSelect, amountInput].forEach((input) =>
+    input.addEventListener("change", commit)
   );
-  border-bottom: 2px solid var(--accent-highlight);
-  box-shadow: 0 16px 36px -28px rgba(91,130,255,0.5);
+  typeSelect.addEventListener("change", () => {
+    tr.dataset.type = typeSelect.value;
+    populateCategorySelect(catSelect, typeSelect.value, null);
+    commit();
+  });
+
+  deleteBtn.addEventListener("click", () => deleteRow(tr));
+
+  return fragment;
+}
+
+// ----------------------------------------------------------------------------
+// Criar / salvar / excluir linhas
+// ----------------------------------------------------------------------------
+
+async function createBlankRow() {
+  const today = new Date().toISOString().slice(0, 10);
+  const defaultCategory = categoriesForKind("gasto")[0]?.name || "Outros gastos";
+  try {
+    const res = await fetch(`${API}/entries`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        date: today,
+        description: "",
+        category: defaultCategory,
+        type: "gasto",
+        amount: 0,
+      }),
+    });
+    if (!res.ok) throw new Error("Erro ao criar lançamento");
+    activeMonth = today.slice(0, 7);
+    await loadEntries();
+    focusLastRowDescription();
+  } catch (err) {
+    console.error(err);
+    alert("Não foi possível criar o lançamento. Verifique se o backend está rodando.");
+  }
+}
+
+async function saveRow(tr, payload) {
+  const id = tr.dataset.id;
+  try {
+    const res = await fetch(`${API}/entries/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error("Erro ao salvar");
+    await loadEntries();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function deleteRow(tr) {
+  const id = tr.dataset.id;
+  if (!confirm("Excluir este lançamento?")) return;
+  try {
+    const res = await fetch(`${API}/entries/${id}`, { method: "DELETE" });
+    if (!res.ok) throw new Error("Erro ao excluir");
+    await loadEntries();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function repeatEntry(id, alreadyRecurring) {
+  const message = alreadyRecurring
+    ? "Esse lançamento já repete todo mês. Gerar novamente os próximos 12 meses (preenchendo meses que ainda não têm essa recorrência)?"
+    : "Repetir esse lançamento todo mês pelos próximos 12 meses?";
+  if (!confirm(message)) return;
+
+  try {
+    const res = await fetch(`${API}/entries/${id}/repeat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ months: 11 }),
+    });
+    if (!res.ok) throw new Error("Erro ao repetir lançamento");
+    await loadEntries();
+  } catch (err) {
+    console.error(err);
+    alert("Não foi possível repetir o lançamento. Verifique se o backend está rodando.");
+  }
+}
+
+function focusLastRowDescription() {
+  const rows = el.tbody.querySelectorAll(".ledger-row");
+  const last = rows[rows.length - 1];
+  if (last) last.querySelector(".cell-desc").focus();
+}
+
+// ----------------------------------------------------------------------------
+// Resumo + gráficos
+// ----------------------------------------------------------------------------
+
+async function loadSummary() {
+  try {
+    const res = await fetch(`${API}/summary`);
+    const data = await res.json();
+    monthlySeriesCache = data.monthly;
+    renderStats(data);
+    renderMonthlyChart(data.monthly);
+    renderCategoryChart(data.by_category);
+    renderMonthCompare();
+  } catch (err) {
+    console.error("Falha ao carregar resumo", err);
+  }
+}
+
+function renderStats(data) {
+  currentSaldo = data.saldo;
+
+  el.saldoTotal.textContent = formatCurrency(data.saldo);
+  el.saldoTotal.style.color = data.saldo < 0 ? "var(--accent-gasto)" : "var(--text)";
+  el.totalGanhos.textContent = formatCurrency(data.total_ganhos);
+  el.totalGastos.textContent = formatCurrency(data.total_gastos);
+
+  const taxa = data.total_ganhos > 0
+    ? (data.saldo / data.total_ganhos) * 100
+    : 0;
+  el.taxaEconomia.textContent = `${taxa.toFixed(1)}%`;
+
+  renderGoals();
+}
+
+function monthLabel(monthKey) {
+  const [year, month] = monthKey.split("-");
+  return `${month}/${year.slice(2)}`;
+}
+
+// Compara o mês selecionado nas abas com o mês anterior (o anterior
+// cronologicamente entre os que têm lançamentos, não necessariamente o mês
+// civil seguido). Ganhos/economia: subir é bom. Gastos: subir é ruim.
+function renderMonthCompare() {
+  el.monthCompare.innerHTML = "";
+  if (!activeMonth || monthlySeriesCache.length === 0) return;
+
+  const idx = monthlySeriesCache.findIndex((m) => m.month === activeMonth);
+  if (idx === -1) return;
+
+  const current = monthlySeriesCache[idx];
+  const previous = idx > 0 ? monthlySeriesCache[idx - 1] : null;
+
+  if (!previous) {
+    const note = document.createElement("span");
+    note.className = "month-compare-item month-compare-label";
+    note.textContent = "Primeiro mês com lançamentos — ainda sem comparação.";
+    el.monthCompare.appendChild(note);
+    return;
+  }
+
+  const previousLabel = monthLabel(previous.month);
+  el.monthCompare.appendChild(
+    buildCompareItem("Ganhos", current.ganhos, previous.ganhos, false, previousLabel)
+  );
+  el.monthCompare.appendChild(
+    buildCompareItem("Gastos", current.gastos, previous.gastos, true, previousLabel)
+  );
+  el.monthCompare.appendChild(
+    buildCompareItem("Economia", current.economia, previous.economia, false, previousLabel)
+  );
+}
+
+function buildCompareItem(label, current, previous, higherIsBad, previousLabel) {
+  const item = document.createElement("span");
+  item.className = "month-compare-item";
+
+  const labelSpan = document.createElement("span");
+  labelSpan.className = "month-compare-label";
+  labelSpan.textContent = `${label}`;
+  item.appendChild(labelSpan);
+
+  const deltaSpan = document.createElement("span");
+  deltaSpan.className = "month-compare-delta";
+
+  if (previous === 0) {
+    deltaSpan.classList.add("is-neutral");
+    deltaSpan.textContent = current === 0 ? "—" : `novo vs. ${previousLabel}`;
+  } else {
+    const pct = Math.round(((current - previous) / Math.abs(previous)) * 100);
+    const arrow = pct > 0 ? "▲" : pct < 0 ? "▼" : "•";
+    const goingUp = pct > 0;
+    const isGood = pct === 0 ? null : higherIsBad ? !goingUp : goingUp;
+    deltaSpan.classList.add(isGood === null ? "is-neutral" : isGood ? "is-good" : "is-bad");
+    deltaSpan.textContent = `${arrow} ${Math.abs(pct)}% vs. ${previousLabel}`;
+  }
+
+  item.appendChild(deltaSpan);
+  return item;
+}
+
+// Gráfico redesenhado: em vez de barras agrupadas + linha em eixo duplo
+// (difícil de comparar de relance), ganhos sobem a partir do zero e gastos
+// descem a partir do zero — a "forma" do mês aparece num único olhar.
+// O saldo acumulado vira uma linha fina no mesmo eixo, mostrando a
+// tendência por cima das barras.
+function renderMonthlyChart(monthly) {
+  const ctx = document.getElementById("monthly-chart");
+  const labels = monthly.map((m) => monthLabel(m.month));
+  const ganhos = monthly.map((m) => m.ganhos);
+  const gastosNegativos = monthly.map((m) => -m.gastos);
+  const saldoAcumulado = monthly.map((m) => m.saldo_acumulado);
+
+  if (monthlyChart) monthlyChart.destroy();
+
+  monthlyChart = new Chart(ctx, {
+    data: {
+      labels,
+      datasets: [
+        {
+          type: "bar",
+          label: "Ganhos",
+          data: ganhos,
+          backgroundColor: "rgba(34,195,130,0.7)",
+          borderRadius: 4,
+          order: 2,
+          stack: "fluxo",
+        },
+        {
+          type: "bar",
+          label: "Gastos",
+          data: gastosNegativos,
+          backgroundColor: "rgba(255,92,100,0.7)",
+          borderRadius: 4,
+          order: 2,
+          stack: "fluxo",
+        },
+        {
+          type: "line",
+          label: "Saldo acumulado",
+          data: saldoAcumulado,
+          borderColor: "#5B82FF",
+          backgroundColor: "#5B82FF",
+          tension: 0.3,
+          pointRadius: 3,
+          pointBackgroundColor: "#5B82FF",
+          borderWidth: 2,
+          order: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: {
+          labels: { color: "#9BAAA2", font: { family: "Inter", size: 11.5 } },
+        },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.dataset.label}: ${formatCurrency(Math.abs(ctx.parsed.y))}`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { color: "#9BAAA2", font: { family: "IBM Plex Mono", size: 11 } },
+          grid: { display: false },
+        },
+        y: {
+          ticks: {
+            color: "#9BAAA2",
+            font: { family: "IBM Plex Mono", size: 10.5 },
+            callback: (v) => formatCurrency(Math.abs(v)),
+          },
+          grid: {
+            color: (ctx) => (ctx.tick.value === 0 ? "rgba(255,255,255,0.24)" : "rgba(255,255,255,0.06)"),
+          },
+        },
+      },
+    },
+  });
+}
+
+const DONUT_COLORS = [
+  "#F2B84E", "#FF5C64", "#5B82FF", "#B48CFF", "#4DB8E8",
+  "#F08AAB", "#E0913D", "#8C7AE6", "#7A93E8", "#E0648B",
+];
+
+function renderCategoryChart(byCategory) {
+  const ctx = document.getElementById("category-chart");
+  el.categoryEmpty.hidden = byCategory.length > 0;
+  document.getElementById("category-chart").style.display =
+    byCategory.length > 0 ? "block" : "none";
+
+  if (categoryChart) categoryChart.destroy();
+  if (byCategory.length === 0) return;
+
+  categoryChart = new Chart(ctx, {
+    type: "doughnut",
+    data: {
+      labels: byCategory.map((c) => c.category),
+      datasets: [
+        {
+          data: byCategory.map((c) => c.amount),
+          backgroundColor: byCategory.map((_, i) => DONUT_COLORS[i % DONUT_COLORS.length]),
+          borderColor: "#151923",
+          borderWidth: 2,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: "62%",
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: {
+            color: "#9BAAA2",
+            font: { family: "Inter", size: 10.5 },
+            boxWidth: 10,
+            padding: 10,
+          },
+        },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.label}: ${formatCurrency(ctx.parsed)}`,
+          },
+        },
+      },
+    },
+  });
+}
+
+// ----------------------------------------------------------------------------
+// Utils
+// ----------------------------------------------------------------------------
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
 }
-
-.site-header-inner {
-  max-width: var(--content-max);
-  margin: 0 auto;
-  padding: 26px 40px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
-}
-
-.brand { display: flex; align-items: center; gap: 16px; }
-
-.brand-text h1 {
-  font-family: var(--font-display);
-  font-style: italic;
-  font-size: 32px;
-  font-weight: 500;
-  margin: 0;
-  letter-spacing: 0.01em;
-}
-
-.brand-dot { color: var(--accent-highlight); }
-
-.brand-text p {
-  margin: 3px 0 0;
-  font-size: 12.5px;
-  color: var(--text-muted);
-  letter-spacing: 0.01em;
-}
-
-.site-header-meta {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-
-.brand-date {
-  font-family: var(--font-mono);
-  font-size: 12.5px;
-  color: var(--text-faint);
-  text-transform: capitalize;
-}
-
-/* ============================== HERO ============================== */
-
-.hero {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 40px;
-  padding-bottom: 40px;
-  margin-bottom: 44px;
-  border-bottom: 1px solid var(--line);
-  flex-wrap: wrap;
-}
-
-.hero-eyebrow {
-  font-size: 11.5px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  font-weight: 600;
-}
-
-.hero-number-wrap {
-  position: relative;
-  display: inline-block;
-  margin-top: 6px;
-}
-
-.hero-number {
-  font-family: var(--font-display);
-  font-size: clamp(44px, 6.4vw, 68px);
-  font-weight: 400;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-  letter-spacing: -0.01em;
-  color: var(--text);
-}
-
-.hero-caption {
-  margin: 18px 0 0;
-  font-size: 13.5px;
-  color: var(--text-muted);
-  max-width: 360px;
-}
-
-.hero-chips {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.chip {
-  padding: 14px 20px;
-  border-radius: var(--radius-m);
-  border: 1px solid var(--line);
-  background: var(--bg-card);
-  box-shadow: var(--shadow-card);
-  min-width: 150px;
-}
-
-.chip-label {
-  display: block;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-
-.chip-value {
-  display: block;
-  font-family: var(--font-mono);
-  font-size: 19px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-}
-
-.chip--ganho { border-color: rgba(34,195,130,0.35); }
-.chip--ganho .chip-value { color: var(--accent-ganho); }
-.chip--gasto { border-color: rgba(255,92,100,0.35); }
-.chip--gasto .chip-value { color: var(--accent-gasto); }
-.chip--economia { border-color: rgba(180,140,255,0.4); }
-.chip--economia .chip-value { color: var(--accent-violet); }
-
-/* ============================== SECTION HEAD ============================== */
-
-.section-eyebrow {
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  font-weight: 600;
-}
-
-.section-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  margin-bottom: 18px;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.section-head h2, .section-head h3 {
-  font-family: var(--font-display);
-  font-weight: 400;
-  margin: 4px 0 0;
-}
-
-.section-head h2 { font-size: 26px; }
-
-.btn {
-  border: 1px solid var(--line-strong);
-  background: var(--bg-card);
-  color: var(--text);
-  padding: 10px 18px;
-  border-radius: var(--radius-s);
-  font-size: 13.5px;
-  font-weight: 500;
-  transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
-}
-
-.btn:hover { background: var(--bg-elevated); border-color: var(--accent-highlight); }
-.btn:active { transform: translateY(1px); }
-
-.btn--primary {
-  background: var(--accent-highlight);
-  border-color: var(--accent-highlight);
-  color: #0B1310;
-  font-weight: 600;
-}
-
-.btn--primary:hover { background: #7C9AFF; border-color: #7C9AFF; }
-
-.btn--small {
-  padding: 8px 14px;
-  font-size: 12.5px;
-}
-
-.btn:focus-visible { outline: 2px solid var(--accent-highlight); outline-offset: 2px; }
-
-/* ============================== METAS FUTURAS ============================== */
-
-.planning-section { margin-bottom: 40px; }
-
-.planning-block + .planning-block {
-  margin-top: 32px;
-  padding-top: 28px;
-  border-top: 1px solid var(--line);
-}
-
-.planning-block-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.planning-block-head h3 {
-  font-family: var(--font-display);
-  font-style: italic;
-  font-weight: 500;
-  font-size: 21px;
-  margin: 0;
-  color: var(--text);
-}
-
-.goal-add-form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 20px;
-  padding: 16px;
-  border-radius: var(--radius-m);
-  background: var(--bg-card);
-  border: 1px solid var(--line);
-}
-
-.goal-add-input {
-  background: var(--bg-elevated);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-s);
-  color: var(--text);
-  font-family: var(--font-body);
-  font-size: 13px;
-  padding: 9px 12px;
-}
-
-.goal-add-name { flex: 2 1 220px; }
-.goal-add-amount { flex: 1 1 140px; }
-.goal-add-date { flex: 1 1 150px; color-scheme: dark; }
-
-.goal-add-input:focus {
-  outline: none;
-  border-color: var(--accent-highlight);
-}
-
-.goals-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 20px;
-}
-
-.goal-card {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-l);
-  background: var(--bg-card);
-  box-shadow: var(--shadow-card);
-  padding: 22px 22px;
-}
-
-.goal-card-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.goal-name {
-  font-family: var(--font-display);
-  font-style: italic;
-  font-weight: 500;
-  font-size: 19px;
-  margin: 0;
-  color: var(--text);
-}
-
-.goal-delete {
-  background: transparent;
-  border: none;
-  color: var(--text-faint);
-  font-size: 13px;
-  width: 26px;
-  height: 26px;
-  border-radius: var(--radius-s);
-  flex: 0 0 auto;
-  transition: color 0.15s ease, background 0.15s ease;
-}
-
-.goal-delete:hover { color: var(--accent-gasto); background: var(--accent-gasto-dim); }
-
-.goal-amounts {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  margin: 16px 0 18px;
-  font-family: var(--font-mono);
-}
-
-.goal-current {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-
-.goal-target {
-  font-size: 12.5px;
-  color: var(--text-faint);
-  font-variant-numeric: tabular-nums;
-}
-
-.goal-progress-track {
-  height: 8px;
-  border-radius: 999px;
-  background: var(--bg-sunken);
-  overflow: hidden;
-}
-
-.goal-progress-fill {
-  height: 100%;
-  border-radius: 999px;
-  background: var(--accent-highlight);
-  transition: width 0.3s ease;
-}
-
-.goal-progress-fill.is-complete { background: var(--accent-ganho); }
-
-.goal-card-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 14px;
-}
-
-.goal-progress-label {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.goal-date-badge {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-faint);
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: var(--bg-sunken);
-  border: 1px solid var(--line);
-}
-
-/* ============================== ORÇAMENTOS ============================== */
-/* Reaproveita a base de .goal-card; aqui só o que é específico de orçamento:
-   o <select> de categoria no formulário e os estados de alerta da barra. */
-
-select.budget-add-category {
-  flex: 1 1 220px;
-  cursor: pointer;
-}
-
-.budget-progress-fill.is-warning { background: var(--accent-violet); }
-.budget-progress-fill.is-over { background: var(--accent-gasto); }
-
-.budget-limit { color: var(--text-faint); }
-
-/* ============================== CATEGORIAS ============================== */
-
-.categories-section { margin-bottom: 40px; }
-
-.categories-panel {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-l);
-  background: var(--bg-card);
-  box-shadow: var(--shadow-card);
-  padding: 22px;
-}
-
-.categories-columns {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 28px;
-}
-
-.categories-column-title {
-  font-family: var(--font-body);
-  font-size: 13px;
-  font-weight: 700;
-  margin: 0 0 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--line);
-}
-
-.categories-column-title--ganho { color: var(--accent-ganho); }
-.categories-column-title--gasto { color: var(--accent-gasto); }
-
-.category-chip-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 14px;
-  min-height: 32px;
-}
-
-.category-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px 6px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--line-strong);
-  background: var(--bg-elevated);
-  font-size: 12.5px;
-  color: var(--text);
-}
-
-.category-chip button {
-  background: transparent;
-  border: none;
-  color: var(--text-faint);
-  font-size: 11px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.15s ease, background 0.15s ease;
-}
-
-.category-chip button:hover { color: var(--accent-gasto); background: var(--accent-gasto-dim); }
-
-.category-add-form {
-  display: flex;
-  gap: 8px;
-}
-
-.category-add-input {
-  flex: 1;
-  background: var(--bg-elevated);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-s);
-  color: var(--text);
-  font-family: var(--font-body);
-  font-size: 13px;
-  padding: 9px 12px;
-}
-
-.category-add-input:focus {
-  outline: none;
-  border-color: var(--accent-highlight);
-}
-
-.category-empty-note {
-  font-size: 12.5px;
-  color: var(--text-faint);
-}
-
-/* ============================== LEDGER TOOLBAR (busca + comparação) ============================== */
-
-.ledger-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
-}
-
-.ledger-search {
-  flex: 1 1 260px;
-  max-width: 360px;
-  background: var(--bg-card);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-s);
-  color: var(--text);
-  font-family: var(--font-body);
-  font-size: 13px;
-  padding: 9px 12px;
-}
-
-.ledger-search:focus {
-  outline: none;
-  border-color: var(--accent-highlight);
-}
-
-.ledger-search::placeholder { color: var(--text-faint); }
-
-.month-compare {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text-faint);
-}
-
-.month-compare-item { display: inline-flex; align-items: center; gap: 5px; }
-.month-compare-label { color: var(--text-faint); }
-.month-compare-delta { font-weight: 600; }
-.month-compare-delta.is-good { color: var(--accent-ganho); }
-.month-compare-delta.is-bad { color: var(--accent-gasto); }
-.month-compare-delta.is-neutral { color: var(--text-faint); }
-
-/* ============================== MONTH TABS (signature element) ==============================
-   Abas de fichário: cada mês vira uma "guia" acima do livro de lançamentos,
-   como as divisórias de um caderno de contas físico. Não existe uma visão
-   "Todos" — sempre um mês por vez, com a guia ativa nivelada com a tabela
-   e as demais recuadas, como páginas por trás. */
-
-.month-tabs {
-  display: flex;
-  align-items: flex-end;
-  gap: 3px;
-  padding: 0 4px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.month-tabs::-webkit-scrollbar { display: none; }
-
-.month-tab {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 9px 16px 8px;
-  border: 1px solid var(--line-strong);
-  border-bottom: none;
-  border-radius: 8px 8px 0 0;
-  background: var(--bg-sunken);
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  transform: translateY(5px);
-  transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
-  position: relative;
-}
-
-.month-tab:hover { transform: translateY(2px); color: var(--text); }
-
-.month-tab.is-active {
-  background: var(--bg-card);
-  color: var(--text);
-  font-weight: 600;
-  transform: translateY(0);
-  z-index: 2;
-  box-shadow: 0 -2px 0 0 var(--accent-highlight) inset;
-}
-
-.month-tab-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--text-faint);
-  flex: 0 0 auto;
-}
-
-.month-tab-dot--up { background: var(--accent-ganho); }
-.month-tab-dot--down { background: var(--accent-gasto); }
-
-/* ============================== LEDGER TABLE ============================== */
-
-.ledger-section { margin-bottom: 56px; }
-
-.ledger-table-wrap {
-  border: 1px solid var(--line-strong);
-  border-radius: 0 var(--radius-l) var(--radius-l) var(--radius-l);
-  overflow: hidden;
-  background: var(--bg-card);
-  box-shadow: var(--shadow-card);
-}
-
-.month-tabs:not(:empty) + .ledger-table-wrap { margin-top: -1px; }
-
-.ledger-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13.5px;
-}
-
-.ledger-table thead th {
-  text-align: left;
-  font-size: 10.5px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  font-weight: 700;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--line-strong);
-  background: var(--bg-elevated);
-}
-
-.ledger-table th.col-date { border-right: 1px solid var(--line-strong); }
-.ledger-table td.col-date { border-right: 1px solid var(--line); }
-
-.ledger-table td {
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--line);
-  vertical-align: middle;
-}
-
-.ledger-row:nth-child(even) { background: rgba(255,255,255,0.015); }
-.ledger-row:hover { background: var(--accent-highlight-dim); }
-
-.col-amount, .col-balance { text-align: right; }
-.col-actions { width: 68px; text-align: center; white-space: nowrap; }
-.col-desc { position: relative; }
-
-.cell-input {
-  width: 100%;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-s);
-  color: var(--text);
-  font-family: var(--font-body);
-  font-size: 13.5px;
-  padding: 8px 8px;
-}
-
-.cell-desc { padding-right: 26px; }
-
-.recurring-badge {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 12px;
-  opacity: 0.85;
-  pointer-events: none;
-}
-
-.cell-amount, .cell-balance, .cell-date {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-
-.cell-amount { text-align: right; }
-
-/* Campo de data: texto formatado dd/mm/aa visível, com um input[type=date]
-   nativo escondido por trás que só existe pra abrir o calendário do
-   navegador quando o botão é clicado — melhor dos dois mundos. */
-.date-field { position: relative; display: flex; align-items: center; }
-.date-field .cell-date { padding-right: 24px; }
-
-.cell-date-native {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
-  border: none;
-}
-
-.date-picker-btn {
-  position: absolute;
-  right: 2px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: transparent;
-  border: none;
-  color: var(--text-faint);
-  font-size: 12px;
-  width: 22px;
-  height: 22px;
-  border-radius: var(--radius-s);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.15s ease, background 0.15s ease;
-}
-
-.date-picker-btn:hover { color: var(--accent-highlight); background: var(--accent-highlight-dim); }
-
-.cell-input:hover { border-color: var(--line-strong); }
-.cell-input:focus {
-  outline: none;
-  border-color: var(--accent-highlight);
-  background: var(--accent-highlight-dim);
-}
-
-.cell-type, .cell-cat {
-  appearance: none;
-  -webkit-appearance: none;
-  cursor: pointer;
-  padding-right: 20px;
-  background-image: linear-gradient(45deg, transparent 50%, var(--text-faint) 50%), linear-gradient(135deg, var(--text-faint) 50%, transparent 50%);
-  background-position: right 10px center, right 4px center;
-  background-size: 5px 5px, 5px 5px;
-  background-repeat: no-repeat;
-}
-
-.cell-cat option, .cell-type option {
-  background: var(--bg-card);
-  color: var(--text);
-}
-
-.ledger-row[data-type="ganho"] .cell-type { color: var(--accent-ganho); }
-.ledger-row[data-type="gasto"] .cell-type { color: var(--accent-gasto); }
-
-.cell-balance {
-  display: block;
-  padding: 8px;
-  color: var(--text-muted);
-}
-
-.row-repeat,
-.row-delete {
-  background: transparent;
-  border: none;
-  color: var(--text-faint);
-  font-size: 13px;
-  width: 26px;
-  height: 26px;
-  border-radius: var(--radius-s);
-  transition: color 0.15s ease, background 0.15s ease;
-}
-
-.row-repeat:hover { color: var(--accent-highlight); background: var(--accent-highlight-dim); }
-.row-repeat.is-active { color: var(--accent-highlight); opacity: 0.9; }
-.row-delete:hover { color: var(--accent-gasto); background: var(--accent-gasto-dim); }
-
-.empty-state {
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 13.5px;
-  padding: 36px 24px;
-  margin: 0;
-}
-
-/* ============================== CHARTS ============================== */
-
-.charts-section {
-  display: grid;
-  grid-template-columns: 1.6fr 1fr;
-  gap: 20px;
-  margin-bottom: 40px;
-}
-
-.chart-card {
