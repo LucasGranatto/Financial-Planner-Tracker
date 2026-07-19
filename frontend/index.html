@@ -53,38 +53,6 @@
     </div>
   </section>
 
-  <!-- ============================== CATEGORIAS ============================== -->
-  <section class="categories-section">
-    <div class="section-head">
-      <div>
-        <span class="section-eyebrow">Organização</span>
-        <h2>Suas categorias</h2>
-      </div>
-      <button class="btn" id="toggle-categories-btn" aria-expanded="false">Gerenciar categorias</button>
-    </div>
-
-    <div class="categories-panel" id="categories-panel" hidden>
-      <div class="categories-columns">
-        <div class="categories-column">
-          <h3 class="categories-column-title categories-column-title--ganho">Categorias de ganho</h3>
-          <div class="category-chip-list" id="ganho-category-list"></div>
-          <form class="category-add-form" id="ganho-category-form">
-            <input type="text" class="category-add-input" placeholder="Nova categoria de ganho" required />
-            <button type="submit" class="btn btn--small">Adicionar</button>
-          </form>
-        </div>
-        <div class="categories-column">
-          <h3 class="categories-column-title categories-column-title--gasto">Categorias de gasto</h3>
-          <div class="category-chip-list" id="gasto-category-list"></div>
-          <form class="category-add-form" id="gasto-category-form">
-            <input type="text" class="category-add-input" placeholder="Nova categoria de gasto" required />
-            <button type="submit" class="btn btn--small">Adicionar</button>
-          </form>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <!-- ============================== TABELA ============================== -->
   <section class="ledger-section">
     <div class="section-head">
@@ -149,53 +117,87 @@
     </div>
   </section>
 
-  <!-- ============================== METAS FUTURAS ============================== -->
-  <section class="goals-section">
+  <!-- ============================== CATEGORIAS ============================== -->
+  <section class="categories-section">
     <div class="section-head">
       <div>
-        <span class="section-eyebrow">Planejamento</span>
-        <h2>Metas futuras</h2>
+        <span class="section-eyebrow">Organização</span>
+        <h2>Suas categorias</h2>
       </div>
-      <button class="btn btn--primary" id="add-goal-btn">+ Nova meta</button>
+      <button class="btn" id="toggle-categories-btn" aria-expanded="false">Gerenciar categorias</button>
     </div>
 
-    <form class="goal-add-form" id="goal-add-form" hidden>
-      <input type="text" class="goal-add-input goal-add-name" placeholder="Nome da meta (ex: Viagem, Reserva de emergência)" required />
-      <input type="number" step="0.01" min="0.01" class="goal-add-input goal-add-amount" placeholder="Valor alvo (R$)" required />
-      <input type="date" class="goal-add-input goal-add-date" title="Data alvo (opcional)" />
-      <button type="submit" class="btn btn--small btn--primary">Salvar meta</button>
-      <button type="button" class="btn btn--small" id="goal-cancel-btn">Cancelar</button>
-    </form>
-
-    <div class="goals-grid" id="goals-grid"></div>
-    <p class="empty-state" id="goals-empty" hidden>
-      Nenhuma meta ainda. Clique em <strong>+ Nova meta</strong> para definir seu próximo objetivo — o
-      progresso é calculado a partir do seu saldo acumulado atual.
-    </p>
+    <div class="categories-panel" id="categories-panel" hidden>
+      <div class="categories-columns">
+        <div class="categories-column">
+          <h3 class="categories-column-title categories-column-title--ganho">Categorias de ganho</h3>
+          <div class="category-chip-list" id="ganho-category-list"></div>
+          <form class="category-add-form" id="ganho-category-form">
+            <input type="text" class="category-add-input" placeholder="Nova categoria de ganho" required />
+            <button type="submit" class="btn btn--small">Adicionar</button>
+          </form>
+        </div>
+        <div class="categories-column">
+          <h3 class="categories-column-title categories-column-title--gasto">Categorias de gasto</h3>
+          <div class="category-chip-list" id="gasto-category-list"></div>
+          <form class="category-add-form" id="gasto-category-form">
+            <input type="text" class="category-add-input" placeholder="Nova categoria de gasto" required />
+            <button type="submit" class="btn btn--small">Adicionar</button>
+          </form>
+        </div>
+      </div>
+    </div>
   </section>
 
-  <!-- ============================== ORÇAMENTOS ============================== -->
-  <section class="budgets-section">
+  <!-- ============================== PLANEJAMENTO (metas + orçamentos) ============================== -->
+  <section class="planning-section">
     <div class="section-head">
       <div>
         <span class="section-eyebrow">Planejamento</span>
-        <h2>Orçamentos por categoria</h2>
+        <h2>Metas e orçamentos</h2>
       </div>
-      <button class="btn btn--primary" id="add-budget-btn">+ Definir orçamento</button>
     </div>
 
-    <form class="budget-add-form" id="budget-add-form" hidden>
-      <select class="goal-add-input budget-add-category" required></select>
-      <input type="number" step="0.01" min="0.01" class="goal-add-input budget-add-amount" placeholder="Limite mensal (R$)" required />
-      <button type="submit" class="btn btn--small btn--primary">Salvar</button>
-      <button type="button" class="btn btn--small" id="budget-cancel-btn">Cancelar</button>
-    </form>
+    <div class="planning-block">
+      <div class="planning-block-head">
+        <h3>Metas futuras</h3>
+        <button class="btn btn--primary" id="add-goal-btn">+ Nova meta</button>
+      </div>
 
-    <div class="goals-grid" id="budgets-grid"></div>
-    <p class="empty-state" id="budgets-empty" hidden>
-      Nenhum orçamento definido. Clique em <strong>+ Definir orçamento</strong> pra pôr um teto mensal
-      numa categoria de gasto — o progresso acompanha o mês selecionado no livro de lançamentos.
-    </p>
+      <form class="goal-add-form" id="goal-add-form" hidden>
+        <input type="text" class="goal-add-input goal-add-name" placeholder="Nome da meta (ex: Viagem, Reserva de emergência)" required />
+        <input type="number" step="0.01" min="0.01" class="goal-add-input goal-add-amount" placeholder="Valor alvo (R$)" required />
+        <input type="date" class="goal-add-input goal-add-date" title="Data alvo (opcional)" />
+        <button type="submit" class="btn btn--small btn--primary">Salvar meta</button>
+        <button type="button" class="btn btn--small" id="goal-cancel-btn">Cancelar</button>
+      </form>
+
+      <div class="goals-grid" id="goals-grid"></div>
+      <p class="empty-state" id="goals-empty" hidden>
+        Nenhuma meta ainda. Clique em <strong>+ Nova meta</strong> para definir seu próximo objetivo — o
+        progresso é calculado a partir do seu saldo acumulado atual.
+      </p>
+    </div>
+
+    <div class="planning-block">
+      <div class="planning-block-head">
+        <h3>Orçamentos por categoria</h3>
+        <button class="btn btn--primary" id="add-budget-btn">+ Definir orçamento</button>
+      </div>
+
+      <form class="budget-add-form" id="budget-add-form" hidden>
+        <select class="goal-add-input budget-add-category" required></select>
+        <input type="number" step="0.01" min="0.01" class="goal-add-input budget-add-amount" placeholder="Limite mensal (R$)" required />
+        <button type="submit" class="btn btn--small btn--primary">Salvar</button>
+        <button type="button" class="btn btn--small" id="budget-cancel-btn">Cancelar</button>
+      </form>
+
+      <div class="goals-grid" id="budgets-grid"></div>
+      <p class="empty-state" id="budgets-empty" hidden>
+        Nenhum orçamento definido. Clique em <strong>+ Definir orçamento</strong> pra pôr um teto mensal
+        numa categoria de gasto — o progresso acompanha o mês selecionado no livro de lançamentos.
+      </p>
+    </div>
   </section>
 
   <footer class="page-footer">
@@ -208,7 +210,11 @@
 <template id="row-template">
   <tr class="ledger-row">
     <td class="col-date">
-      <input type="date" class="cell-input cell-date" />
+      <div class="date-field">
+        <input type="text" class="cell-input cell-date" placeholder="dd/mm/aa" inputmode="numeric" maxlength="8" />
+        <input type="date" class="cell-date-native" tabindex="-1" aria-hidden="true" />
+        <button type="button" class="date-picker-btn" tabindex="-1" aria-label="Abrir calendário" title="Abrir calendário">📅</button>
+      </div>
     </td>
     <td class="col-desc">
       <input type="text" class="cell-input cell-desc" placeholder="Ex: mercado, aluguel, salário..." />
@@ -224,9 +230,3 @@
       </select>
     </td>
     <td class="col-amount">
-      <input type="number" step="0.01" min="0" class="cell-input cell-amount" placeholder="0,00" />
-    </td>
-    <td class="col-balance">
-      <span class="cell-balance">—</span>
-    </td>
-    <td class="col-actions">
