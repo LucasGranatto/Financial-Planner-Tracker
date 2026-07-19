@@ -285,7 +285,31 @@ button {
 
 /* ============================== METAS FUTURAS ============================== */
 
-.goals-section { margin-bottom: 40px; }
+.planning-section { margin-bottom: 40px; }
+
+.planning-block + .planning-block {
+  margin-top: 32px;
+  padding-top: 28px;
+  border-top: 1px solid var(--line);
+}
+
+.planning-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.planning-block-head h3 {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 21px;
+  margin: 0;
+  color: var(--text);
+}
 
 .goal-add-form {
   display: flex;
@@ -423,8 +447,6 @@ button {
 /* ============================== ORÇAMENTOS ============================== */
 /* Reaproveita a base de .goal-card; aqui só o que é específico de orçamento:
    o <select> de categoria no formulário e os estados de alerta da barra. */
-
-.budgets-section { margin-bottom: 40px; }
 
 select.budget-add-category {
   flex: 1 1 220px;
@@ -710,9 +732,42 @@ select.budget-add-category {
   font-variant-numeric: tabular-nums;
 }
 
-.cell-date { color-scheme: dark; }
-
 .cell-amount { text-align: right; }
+
+/* Campo de data: texto formatado dd/mm/aa visível, com um input[type=date]
+   nativo escondido por trás que só existe pra abrir o calendário do
+   navegador quando o botão é clicado — melhor dos dois mundos. */
+.date-field { position: relative; display: flex; align-items: center; }
+.date-field .cell-date { padding-right: 24px; }
+
+.cell-date-native {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  border: none;
+}
+
+.date-picker-btn {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  font-size: 12px;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-s);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.date-picker-btn:hover { color: var(--accent-highlight); background: var(--accent-highlight-dim); }
 
 .cell-input:hover { border-color: var(--line-strong); }
 .cell-input:focus {
@@ -780,58 +835,3 @@ select.budget-add-category {
 }
 
 .chart-card {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-l);
-  background: var(--bg-card);
-  box-shadow: var(--shadow-card);
-  padding: 22px 22px 12px;
-}
-
-.chart-card-head { margin-bottom: 6px; }
-.chart-card-head h3 {
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: 19px;
-  margin: 4px 0 0;
-}
-
-.chart-canvas-wrap { position: relative; height: 300px; margin-top: 12px; }
-.chart-canvas-wrap--donut { height: 260px; }
-
-/* ============================== FOOTER ============================== */
-
-.page-footer {
-  text-align: center;
-  color: var(--text-faint);
-  font-size: 12px;
-  padding-top: 24px;
-  border-top: 1px solid var(--line);
-}
-
-.page-footer code {
-  font-family: var(--font-mono);
-  color: var(--text-muted);
-}
-
-/* ============================== RESPONSIVE ============================== */
-
-@media (max-width: 1100px) {
-  .page { padding: 32px 24px 80px; }
-  .site-header-inner { padding: 22px 24px; }
-}
-
-@media (max-width: 860px) {
-  .charts-section { grid-template-columns: 1fr; }
-  .categories-columns { grid-template-columns: 1fr; }
-}
-
-@media (max-width: 640px) {
-  .hero { flex-direction: column; align-items: flex-start; }
-  .ledger-table-wrap { overflow-x: auto; }
-  .ledger-table { min-width: 640px; }
-  .site-header-inner { flex-direction: column; align-items: flex-start; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  * { transition: none !important; }
-}
