@@ -21,6 +21,8 @@
     </div>
     <div class="site-header-meta">
       <div class="brand-date" id="today-label"></div>
+      <button class="icon-btn" id="shortcuts-btn" title="Atalhos de teclado" aria-label="Atalhos de teclado">⌨️</button>
+      <button class="icon-btn" id="theme-toggle-btn" title="Alternar tema claro/escuro" aria-label="Alternar tema claro/escuro">🌙</button>
     </div>
   </div>
 </header>
@@ -64,10 +66,15 @@
     </div>
 
     <div class="ledger-toolbar">
-      <input type="text" class="ledger-search" id="ledger-search" placeholder="Buscar por descrição ou categoria..." />
+      <input type="text" class="ledger-search" id="ledger-search" placeholder="Buscar por descrição ou categoria... (atalho: /)" />
       <div class="month-compare" id="month-compare"></div>
+      <div class="export-actions">
+        <button class="btn btn--small" id="export-csv-btn" title="Exportar o mês selecionado em CSV">⬇ CSV</button>
+        <button class="btn btn--small" id="export-pdf-btn" title="Exportar o mês selecionado em PDF">⬇ PDF</button>
+      </div>
     </div>
 
+    <div class="year-tabs" id="year-tabs" hidden></div>
     <div class="month-tabs" id="month-tabs"></div>
 
     <div class="ledger-table-wrap">
@@ -103,6 +110,17 @@
       <div class="chart-canvas-wrap">
         <canvas id="monthly-chart"></canvas>
       </div>
+    </div>
+
+    <div class="chart-card chart-card--wide" id="yearly-card" hidden>
+      <div class="chart-card-head">
+        <span class="section-eyebrow">Ano a ano</span>
+        <h3>Comparação anual</h3>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas id="yearly-chart"></canvas>
+      </div>
+      <table class="yearly-table" id="yearly-table"></table>
     </div>
 
     <div class="chart-card">
@@ -174,8 +192,8 @@
 
       <div class="goals-grid" id="goals-grid"></div>
       <p class="empty-state" id="goals-empty" hidden>
-        Nenhuma meta ainda. Clique em <strong>+ Nova meta</strong> para definir seu próximo objetivo — o
-        progresso é calculado a partir do seu saldo acumulado atual.
+        Nenhuma meta ainda. Clique em <strong>+ Nova meta</strong> para definir seu próximo objetivo — cada
+        meta tem seu próprio cofrinho, alimentado por contribuições manuais que você registra.
       </p>
     </div>
 
@@ -200,6 +218,42 @@
     </div>
   </section>
 
+  <!-- ============================== SEGURANÇA DOS DADOS ============================== -->
+  <section class="data-section">
+    <div class="section-head">
+      <div>
+        <span class="section-eyebrow">Segurança dos dados</span>
+        <h2>Backups e exportação</h2>
+      </div>
+    </div>
+
+    <div class="offsite-banner" id="offsite-banner" hidden>
+      <span class="offsite-banner-icon">☁️</span>
+      <p class="offsite-banner-text" id="offsite-banner-text"></p>
+      <button class="btn btn--small" id="offsite-banner-action">⬇ Exportar agora</button>
+    </div>
+
+    <div class="data-actions">
+      <button class="btn btn--primary" id="export-data-btn">⬇ Exportar tudo (JSON)</button>
+      <button class="btn" id="import-data-btn">⬆ Importar backup</button>
+      <input type="file" id="import-file-input" accept="application/json" hidden />
+      <button class="btn" id="backup-now-btn">💾 Fazer backup agora</button>
+    </div>
+    <p class="data-hint">
+      Um backup automático é criado a cada 24h enquanto o servidor está rodando, e sempre
+      antes de qualquer importação ou restauração — então dá pra desfazer se algo sair
+      errado. Os arquivos ficam em <code>backend/data/backups/</code>. Isso protege contra
+      erros, mas continua tudo no mesmo disco: baixe uma cópia de vez em quando e guarde em
+      outro lugar (nuvem, pendrive) pra se proteger de perda do disco/computador.
+    </p>
+
+    <div class="backups-list" id="backups-list"></div>
+    <p class="empty-state" id="backups-empty" hidden>
+      Nenhum backup ainda. Clique em <strong>Fazer backup agora</strong> para criar o
+      primeiro, ou deixe o servidor rodando por 24h para o backup automático entrar em ação.
+    </p>
+  </section>
+
   <footer class="page-footer">
     <p>Planner · seus dados ficam salvos localmente no arquivo <code>planner.db</code></p>
   </footer>
@@ -219,6 +273,7 @@
     <td class="col-desc">
       <input type="text" class="cell-input cell-desc" placeholder="Ex: mercado, aluguel, salário..." />
       <span class="recurring-badge" title="Lançamento recorrente" hidden>🔁</span>
+      <span class="installment-badge" title="Lançamento parcelado" hidden></span>
     </td>
     <td class="col-cat">
       <select class="cell-input cell-cat"></select>
@@ -230,3 +285,112 @@
       </select>
     </td>
     <td class="col-amount">
+      <input type="number" step="0.01" min="0" class="cell-input cell-amount" placeholder="0,00" />
+    </td>
+    <td class="col-balance">
+      <span class="cell-balance">—</span>
+    </td>
+    <td class="col-actions">
+      <button class="row-installment" title="Parcelar compra" aria-label="Parcelar compra">💳</button>
+      <button class="row-repeat" title="Repetir todo mês" aria-label="Repetir todo mês">🔁</button>
+      <button class="row-delete" title="Excluir lançamento" aria-label="Excluir lançamento">✕</button>
+    </td>
+  </tr>
+</template>
+
+<!-- template de card de meta (usado pelo JS) -->
+<template id="goal-card-template">
+  <div class="goal-card">
+    <div class="goal-card-head">
+      <h3 class="goal-name"></h3>
+      <button class="goal-delete" title="Excluir meta" aria-label="Excluir meta">✕</button>
+    </div>
+    <div class="goal-amounts">
+      <span class="goal-current"></span>
+      <span class="goal-target"></span>
+    </div>
+    <div class="goal-progress-track">
+      <div class="goal-progress-fill"></div>
+    </div>
+    <div class="goal-card-footer">
+      <span class="goal-progress-label"></span>
+      <span class="goal-date-badge"></span>
+    </div>
+
+    <form class="goal-contribute-form">
+      <input type="number" step="0.01" min="0.01" class="goal-contribute-amount" placeholder="Valor (R$)" required />
+      <button type="submit" class="goal-contribute-btn goal-contribute-btn--deposit" title="Guardar no cofrinho">+ Guardar</button>
+      <button type="button" class="goal-contribute-btn goal-contribute-btn--withdraw" title="Retirar do cofrinho">− Retirar</button>
+    </form>
+
+    <button type="button" class="goal-history-toggle">Ver histórico de contribuições</button>
+    <ul class="goal-history-list" hidden></ul>
+  </div>
+</template>
+
+<!-- template de card de orçamento (usado pelo JS) -->
+<template id="budget-card-template">
+  <div class="goal-card budget-card">
+    <div class="goal-card-head">
+      <h3 class="goal-name budget-category"></h3>
+      <button class="goal-delete budget-delete" title="Remover orçamento" aria-label="Remover orçamento">✕</button>
+    </div>
+    <div class="goal-amounts">
+      <span class="goal-current budget-spent"></span>
+      <span class="goal-target budget-limit"></span>
+    </div>
+    <div class="goal-progress-track">
+      <div class="goal-progress-fill budget-progress-fill"></div>
+    </div>
+    <div class="goal-card-footer">
+      <span class="goal-progress-label budget-progress-label"></span>
+    </div>
+  </div>
+</template>
+
+<!-- painel de atalhos de teclado -->
+<div class="shortcuts-overlay" id="shortcuts-overlay" hidden>
+  <div class="shortcuts-modal">
+    <div class="shortcuts-modal-head">
+      <h3>Atalhos de teclado</h3>
+      <button class="shortcuts-close" id="shortcuts-close-btn" aria-label="Fechar">✕</button>
+    </div>
+    <ul class="shortcuts-list">
+      <li><kbd>N</kbd><span>Novo lançamento</span></li>
+      <li><kbd>/</kbd><span>Buscar no livro de lançamentos</span></li>
+      <li><kbd>G</kbd><span>Nova meta</span></li>
+      <li><kbd>B</kbd><span>Novo orçamento</span></li>
+      <li><kbd>T</kbd><span>Alternar tema claro/escuro</span></li>
+      <li><kbd>←</kbd> <kbd>→</kbd><span>Trocar de mês</span></li>
+      <li><kbd>?</kbd><span>Mostrar/ocultar esta ajuda</span></li>
+      <li><kbd>Esc</kbd><span>Fechar painéis e formulários abertos</span></li>
+    </ul>
+  </div>
+</div>
+
+<!-- toast de desfazer exclusões individuais -->
+<div class="undo-toast" id="undo-toast" hidden>
+  <span id="undo-toast-message"></span>
+  <button type="button" class="undo-toast-btn" id="undo-toast-btn">Desfazer</button>
+</div>
+
+<!-- confirmação de ações destrutivas (importar / restaurar backup) -->
+<div class="shortcuts-overlay" id="confirm-overlay" hidden>
+  <div class="shortcuts-modal confirm-modal">
+    <div class="shortcuts-modal-head">
+      <h3 id="confirm-title">Confirmar ação</h3>
+      <button class="shortcuts-close" id="confirm-close-btn" aria-label="Fechar">✕</button>
+    </div>
+    <p class="confirm-message" id="confirm-message"></p>
+    <div class="confirm-actions">
+      <button class="btn" id="confirm-cancel-btn">Cancelar</button>
+      <button class="btn" id="confirm-secondary-btn" hidden></button>
+      <button class="btn btn--danger" id="confirm-ok-btn">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="/static/script.js"></script>
+</body>
+</html>
