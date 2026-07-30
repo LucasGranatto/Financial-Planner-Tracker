@@ -67,16 +67,17 @@ o histórico de verdade).
   contribuições** no rodapé de cada card mostra todos os depósitos/saques
   registrados, com data e um botão para remover algum lançado por engano
   (o total do cofrinho é recalculado automaticamente).
-- **Abas de mês:** acima da tabela ficam as abas — uma por mês com
-  lançamentos, no estilo das guias de um fichário — sempre mostrando um mês
-  por vez (a mais recente, ou o mês atual se já tiver lançamentos). Clique
-  numa aba para trocar de mês; o pontinho ao lado do nome (no formato
-  MM/AA, ex: "07/26") indica se aquele mês fechou no positivo (verde) ou no
-  negativo (vermelho). O saldo de cada
-  linha continua calculado sobre o histórico completo, então os valores não
-  mudam ao trocar de aba — só a visualização. Quando há lançamentos em mais
-  de um ano, uma linha de abas de **ano** aparece acima das abas de mês pra
-  filtrar quais meses aparecem.
+- **Seletor de mês:** acima da tabela fica um seletor compacto — setas
+  **‹ ›** pra andar mês a mês, e um rótulo central (ex: "Julho de 2026")
+  que, ao ser clicado, abre um popover com navegação por ano e uma grade
+  dos 12 meses (só é possível escolher meses que já têm algum
+  lançamento; os demais aparecem apagados). Cada mês na grade mostra um
+  ponto colorido indicando se fechou no positivo (verde) ou no negativo
+  (vermelho). Sempre um mês por vez — o saldo de cada linha continua
+  calculado sobre o histórico completo, então os valores não mudam ao
+  trocar de mês, só a visualização. Diferente de uma fileira de abas, esse
+  seletor tem tamanho fixo não importa quantos meses ou anos de histórico
+  existam.
 - **Categorias:** clique em **Gerenciar categorias** para abrir o painel.
   Lá você adiciona novas categorias de ganho ou de gasto (ex: "Pets",
   "Viagens", "Bônus") e remove as que não usa. As categorias aparecem
@@ -85,7 +86,7 @@ o histórico de verdade).
 - **Orçamentos por categoria:** clique em **+ Definir orçamento**, escolha
   uma categoria de gasto e um limite mensal. Cada orçamento vira um card com
   barra de progresso comparando o quanto já foi gasto naquela categoria
-  **no mês selecionado nas abas** contra o limite — fica amarela perto do
+  **no mês selecionado no seletor de mês** contra o limite — fica amarela perto do
   limite (80%+) e vermelha se estourar.
 - **Lançamentos recorrentes:** clique no ícone 🔁 de qualquer linha da
   tabela para repeti-la automaticamente pelos próximos 12 meses (mesma
