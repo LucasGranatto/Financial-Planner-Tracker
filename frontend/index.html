@@ -66,7 +66,7 @@
     </div>
 
     <div class="ledger-toolbar">
-      <input type="text" class="ledger-search" id="ledger-search" placeholder="Buscar por descrição ou categoria... (atalho: /)" />
+      <input type="text" class="ledger-search" id="ledger-search" placeholder="Buscar por descrição, categoria ou data (ex: 23/07)... (atalho: /)" />
       <div class="month-compare" id="month-compare"></div>
       <div class="export-actions">
         <button class="btn btn--small" id="export-csv-btn" title="Exportar o mês selecionado em CSV">⬇ CSV</button>
@@ -74,8 +74,20 @@
       </div>
     </div>
 
-    <div class="year-tabs" id="year-tabs" hidden></div>
-    <div class="month-tabs" id="month-tabs"></div>
+    <div class="month-switcher" id="month-switcher">
+      <button type="button" class="switcher-arrow" id="month-prev-btn" title="Mês anterior" aria-label="Mês anterior">‹</button>
+      <button type="button" class="switcher-label" id="month-switcher-label" aria-haspopup="true" aria-expanded="false"></button>
+      <button type="button" class="switcher-arrow" id="month-next-btn" title="Próximo mês" aria-label="Próximo mês">›</button>
+
+      <div class="switcher-popover" id="switcher-popover" hidden>
+        <div class="switcher-year-nav">
+          <button type="button" class="switcher-arrow switcher-arrow--small" id="switcher-year-prev-btn" aria-label="Ano anterior">‹</button>
+          <span class="switcher-year-label" id="switcher-year-label"></span>
+          <button type="button" class="switcher-arrow switcher-arrow--small" id="switcher-year-next-btn" aria-label="Próximo ano">›</button>
+        </div>
+        <div class="switcher-month-grid" id="switcher-month-grid"></div>
+      </div>
+    </div>
 
     <div class="ledger-table-wrap">
       <table class="ledger-table" id="ledger-table">

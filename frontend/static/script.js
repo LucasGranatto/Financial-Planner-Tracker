@@ -22,8 +22,15 @@ const el = {
   gastoCategoryList: document.getElementById("gasto-category-list"),
   ganhoCategoryForm: document.getElementById("ganho-category-form"),
   gastoCategoryForm: document.getElementById("gasto-category-form"),
-  monthTabs: document.getElementById("month-tabs"),
-  yearTabs: document.getElementById("year-tabs"),
+  monthSwitcher: document.getElementById("month-switcher"),
+  monthPrevBtn: document.getElementById("month-prev-btn"),
+  monthSwitcherLabel: document.getElementById("month-switcher-label"),
+  monthNextBtn: document.getElementById("month-next-btn"),
+  switcherPopover: document.getElementById("switcher-popover"),
+  switcherYearPrevBtn: document.getElementById("switcher-year-prev-btn"),
+  switcherYearLabel: document.getElementById("switcher-year-label"),
+  switcherYearNextBtn: document.getElementById("switcher-year-next-btn"),
+  switcherMonthGrid: document.getElementById("switcher-month-grid"),
   addGoalBtn: document.getElementById("add-goal-btn"),
   goalAddForm: document.getElementById("goal-add-form"),
   goalCancelBtn: document.getElementById("goal-cancel-btn"),
@@ -120,6 +127,23 @@ function formatDateDisplay(isoDate) {
   if (!isoDate) return "";
   const [year, month, day] = isoDate.split("-");
   return `${day}/${month}/${year.slice(2)}`;
+}
+
+// Usado pela busca do livro de lançamentos: além de descrição e categoria,
+// também bate com a data em qualquer formato razoável — dd/mm/aa (igual
+// aparece na coluna), dd/mm/aaaa (ano completo), ou aaaa-mm-dd (ISO) — e
+// aceita busca parcial (ex: "23/07", "07/26", "2026-07" ou só "23").
+function entryMatchesSearch(entry, query) {
+  if (!query) return true;
+  if (entry.description.toLowerCase().includes(query)) return true;
+  if (entry.category.toLowerCase().includes(query)) return true;
+
+  const [year, month, day] = entry.date.split("-");
+  const dateShortYear = `${day}/${month}/${year.slice(2)}`;
+  const dateFullYear = `${day}/${month}/${year}`;
+  return (
+    dateShortYear.includes(query) || dateFullYear.includes(query) || entry.date.includes(query)
+  );
 }
 
 function parseDateDisplay(displayDate) {
@@ -221,6 +245,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   initTheme();
   initShortcuts();
+  initMonthSwitcher();
   el.exportCsvBtn.addEventListener("click", exportCsv);
   el.exportPdfBtn.addEventListener("click", exportPdf);
 
@@ -701,7 +726,7 @@ async function loadEntries() {
   try {
     const res = await fetch(`${API}/entries`);
     entriesCache = await res.json();
-    renderMonthTabs();
+    renderMonthSwitcher();
     renderRows();
     loadSummary();
   } catch (err) {
@@ -723,107 +748,169 @@ function monthKeyOf(entry) {
   return entry.date.slice(0, 7);
 }
 
-// Constrói as abas de ano (só aparecem quando há lançamentos em mais de um
-// ano) e as abas de mês a partir dos meses presentes nos lançamentos —
-// sem uma aba "Todos": o livro sempre mostra um mês por vez. Cada aba
-// mostra um ponto colorido indicando se aquele mês fechou no positivo
-// (verde) ou no negativo (vermelho).
-function renderYearTabs() {
-  const years = Array.from(new Set(entriesCache.map((e) => e.date.slice(0, 4)))).sort();
+const MONTH_NAMES_LONG = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+];
+const MONTH_NAMES_SHORT = [
+  "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez",
+];
 
-  if (years.length <= 1) {
-    el.yearTabs.hidden = true;
-    el.yearTabs.innerHTML = "";
-    selectedYear = years[0] || null;
-    return;
-  }
-
-  if (!selectedYear || !years.includes(selectedYear)) {
-    selectedYear = activeMonth ? activeMonth.slice(0, 4) : years[years.length - 1];
-  }
-
-  el.yearTabs.hidden = false;
-  el.yearTabs.innerHTML = "";
-  for (const year of years) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "year-tab" + (year === selectedYear ? " is-active" : "");
-    btn.textContent = year;
-    btn.addEventListener("click", () => {
-      if (selectedYear === year) return;
-      selectedYear = year;
-      activeMonth = null; // força escolher um mês dentro do ano selecionado
-      renderMonthTabs();
-      renderRows();
-      renderMonthCompare();
-    });
-    el.yearTabs.appendChild(btn);
-  }
+function monthLabelLong(monthKey) {
+  const [year, month] = monthKey.split("-");
+  return `${MONTH_NAMES_LONG[parseInt(month, 10) - 1]} de ${year}`;
 }
 
-function renderMonthTabs() {
-  renderYearTabs();
+// Mapa "AAAA-MM" -> economia do mês, e a lista ordenada de meses com pelo
+// menos um lançamento (mantidos em cache pra alimentar o seletor de mês e
+// a navegação por teclado sem precisar recalcular a cada clique).
+let monthTotalsCache = new Map();
+let allMonthsCache = [];
 
-  const monthTotals = new Map(); // "AAAA-MM" -> economia do mês
+// Seletor de mês compacto: substitui o antigo fichário de abas (que ficava
+// largo demais com muitos meses/anos de histórico) por um controle de
+// tamanho fixo — setas pra andar mês a mês, e um rótulo central que abre
+// um popover com navegação por ano e uma grade dos 12 meses. Só é possível
+// escolher meses que já têm pelo menos um lançamento, igual as abas antigas.
+function renderMonthSwitcher() {
+  monthTotalsCache = new Map();
   for (const entry of entriesCache) {
     const key = monthKeyOf(entry);
     const delta = entry.type === "ganho" ? entry.amount : -entry.amount;
-    monthTotals.set(key, (monthTotals.get(key) || 0) + delta);
+    monthTotalsCache.set(key, (monthTotalsCache.get(key) || 0) + delta);
   }
+  allMonthsCache = Array.from(monthTotalsCache.keys()).sort();
 
-  const months = Array.from(monthTotals.keys())
-    .filter((key) => !selectedYear || key.startsWith(selectedYear))
-    .sort();
-
-  el.monthTabs.innerHTML = "";
-
-  if (months.length === 0) {
+  if (allMonthsCache.length === 0) {
     activeMonth = null;
-    return; // nada para mostrar ainda
+    el.monthSwitcherLabel.textContent = "";
+    el.monthPrevBtn.disabled = true;
+    el.monthNextBtn.disabled = true;
+    closeSwitcherPopover();
+    return;
   }
 
-  // se o mês ativo não existe (primeira carga, mudança de ano, ou a última
-  // linha daquele mês foi apagada), escolhe o mês atual (se houver
-  // lançamentos nele) ou cai para o mês mais recente disponível dentro do
-  // ano selecionado
-  if (!activeMonth || !months.includes(activeMonth)) {
+  // se o mês ativo não existe (primeira carga, ou a última linha daquele
+  // mês foi apagada), escolhe o mês atual (se houver lançamentos nele) ou
+  // cai para o mês mais recente disponível
+  if (!activeMonth || !allMonthsCache.includes(activeMonth)) {
     const currentKey = new Date().toISOString().slice(0, 7);
-    activeMonth = months.includes(currentKey) ? currentKey : months[months.length - 1];
+    activeMonth = allMonthsCache.includes(currentKey) ? currentKey : allMonthsCache[allMonthsCache.length - 1];
   }
 
-  for (const key of months) {
-    const economia = monthTotals.get(key);
-    const dotClass = economia > 0 ? "up" : economia < 0 ? "down" : null;
-    const tab = buildMonthTabButton(key, monthLabel(key), dotClass);
-    el.monthTabs.appendChild(tab);
+  el.monthSwitcherLabel.textContent = monthLabelLong(activeMonth);
+
+  const idx = allMonthsCache.indexOf(activeMonth);
+  el.monthPrevBtn.disabled = idx <= 0;
+  el.monthNextBtn.disabled = idx === -1 || idx >= allMonthsCache.length - 1;
+
+  if (!el.switcherPopover.hidden) renderSwitcherPopover();
+}
+
+function selectMonth(key) {
+  if (activeMonth === key) return;
+  activeMonth = key;
+  renderMonthSwitcher();
+  renderRows();
+  renderMonthCompare();
+  renderBudgets(); // orçamentos acompanham o mês selecionado
+}
+
+function switchToAdjacentMonth(direction) {
+  if (allMonthsCache.length === 0) return;
+  const idx = allMonthsCache.indexOf(activeMonth);
+  const nextIdx = idx === -1 ? 0 : idx + direction;
+  if (nextIdx < 0 || nextIdx >= allMonthsCache.length) return;
+  selectMonth(allMonthsCache[nextIdx]);
+}
+
+function openSwitcherPopover() {
+  selectedYear = activeMonth ? activeMonth.slice(0, 4) : (allMonthsCache[allMonthsCache.length - 1] || "").slice(0, 4);
+  el.switcherPopover.hidden = false;
+  el.monthSwitcherLabel.setAttribute("aria-expanded", "true");
+  renderSwitcherPopover();
+}
+
+function closeSwitcherPopover() {
+  el.switcherPopover.hidden = true;
+  el.monthSwitcherLabel.setAttribute("aria-expanded", "false");
+}
+
+function toggleSwitcherPopover() {
+  if (el.switcherPopover.hidden) openSwitcherPopover();
+  else closeSwitcherPopover();
+}
+
+function renderSwitcherPopover() {
+  if (!selectedYear) return;
+  const years = Array.from(new Set(allMonthsCache.map((k) => k.slice(0, 4)))).sort();
+  const yearIdx = years.indexOf(selectedYear);
+
+  el.switcherYearLabel.textContent = selectedYear;
+  el.switcherYearPrevBtn.disabled = yearIdx <= 0;
+  el.switcherYearNextBtn.disabled = yearIdx === -1 || yearIdx >= years.length - 1;
+
+  el.switcherMonthGrid.innerHTML = "";
+  for (let m = 1; m <= 12; m++) {
+    const key = `${selectedYear}-${String(m).padStart(2, "0")}`;
+    const hasData = monthTotalsCache.has(key);
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "switcher-month-btn" + (key === activeMonth ? " is-active" : "");
+    btn.disabled = !hasData;
+
+    let dotClass = "none";
+    if (hasData) {
+      const economia = monthTotalsCache.get(key);
+      dotClass = economia > 0 ? "up" : economia < 0 ? "down" : "none";
+    }
+    const dot = document.createElement("span");
+    dot.className = `switcher-month-dot switcher-month-dot--${dotClass}`;
+    btn.appendChild(dot);
+
+    const label = document.createElement("span");
+    label.textContent = MONTH_NAMES_SHORT[m - 1];
+    btn.appendChild(label);
+
+    if (hasData) {
+      btn.addEventListener("click", () => {
+        closeSwitcherPopover();
+        selectMonth(key);
+      });
+    }
+
+    el.switcherMonthGrid.appendChild(btn);
   }
 }
 
-function buildMonthTabButton(key, label, dotClass) {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "month-tab" + (key === activeMonth ? " is-active" : "");
-  btn.dataset.month = key;
+function initMonthSwitcher() {
+  el.monthPrevBtn.addEventListener("click", () => switchToAdjacentMonth(-1));
+  el.monthNextBtn.addEventListener("click", () => switchToAdjacentMonth(1));
+  el.monthSwitcherLabel.addEventListener("click", toggleSwitcherPopover);
 
-  if (dotClass) {
-    const dot = document.createElement("span");
-    dot.className = `month-tab-dot month-tab-dot--${dotClass}`;
-    btn.appendChild(dot);
-  }
-
-  const text = document.createElement("span");
-  text.textContent = label;
-  btn.appendChild(text);
-
-  btn.addEventListener("click", () => {
-    if (activeMonth === key) return;
-    activeMonth = key;
-    renderMonthTabs();
-    renderRows();
-    renderMonthCompare();
+  el.switcherYearPrevBtn.addEventListener("click", () => {
+    const years = Array.from(new Set(allMonthsCache.map((k) => k.slice(0, 4)))).sort();
+    const idx = years.indexOf(selectedYear);
+    if (idx > 0) {
+      selectedYear = years[idx - 1];
+      renderSwitcherPopover();
+    }
+  });
+  el.switcherYearNextBtn.addEventListener("click", () => {
+    const years = Array.from(new Set(allMonthsCache.map((k) => k.slice(0, 4)))).sort();
+    const idx = years.indexOf(selectedYear);
+    if (idx !== -1 && idx < years.length - 1) {
+      selectedYear = years[idx + 1];
+      renderSwitcherPopover();
+    }
   });
 
-  return btn;
+  document.addEventListener("click", (e) => {
+    if (!el.switcherPopover.hidden && !el.monthSwitcher.contains(e.target)) {
+      closeSwitcherPopover();
+    }
+  });
 }
 
 function renderRows() {
@@ -835,13 +922,8 @@ function renderRows() {
     : [];
 
   if (searchQuery) {
-    visible = visible.filter(({ entry }) =>
-      entry.description.toLowerCase().includes(searchQuery) ||
-      entry.category.toLowerCase().includes(searchQuery)
-    );
+    visible = visible.filter(({ entry }) => entryMatchesSearch(entry, searchQuery));
   }
-
-  el.emptyState.hidden = visible.length > 0;
   if (searchQuery && visible.length === 0) {
     el.emptyState.textContent = "Nenhum lançamento encontrado pra essa busca.";
   } else if (entriesCache.length > 0 && visible.length === 0) {
@@ -1488,6 +1570,10 @@ function closeOpenPanels() {
     closeConfirm(false);
     closedSomething = true;
   }
+  if (!el.switcherPopover.hidden) {
+    closeSwitcherPopover();
+    closedSomething = true;
+  }
   if (!el.goalAddForm.hidden) {
     el.goalAddForm.hidden = true;
     el.goalAddForm.reset();
@@ -1506,15 +1592,6 @@ function closeOpenPanels() {
     el.ledgerSearch.blur();
   }
   return closedSomething;
-}
-
-function switchToAdjacentMonth(direction) {
-  const tabs = Array.from(el.monthTabs.querySelectorAll(".month-tab"));
-  if (tabs.length === 0) return;
-  const idx = tabs.findIndex((t) => t.dataset.month === activeMonth);
-  const nextIdx = idx === -1 ? 0 : idx + direction;
-  if (nextIdx < 0 || nextIdx >= tabs.length) return;
-  tabs[nextIdx].click();
 }
 
 function initShortcuts() {
@@ -1594,10 +1671,7 @@ function currentVisibleEntries() {
     ? withBalance.filter(({ entry }) => monthKeyOf(entry) === activeMonth)
     : [];
   if (searchQuery) {
-    visible = visible.filter(({ entry }) =>
-      entry.description.toLowerCase().includes(searchQuery) ||
-      entry.category.toLowerCase().includes(searchQuery)
-    );
+    visible = visible.filter(({ entry }) => entryMatchesSearch(entry, searchQuery));
   }
   return visible;
 }

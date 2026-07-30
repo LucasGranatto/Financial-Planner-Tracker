@@ -791,64 +791,138 @@ select.budget-add-category {
   margin-left: auto;
 }
 
-/* ============================== MONTH TABS (signature element) ==============================
-   Abas de fichário: cada mês vira uma "guia" acima do livro de lançamentos,
-   como as divisórias de um caderno de contas físico. Não existe uma visão
-   "Todos" — sempre um mês por vez, com a guia ativa nivelada com a tabela
-   e as demais recuadas, como páginas por trás. */
+/* ============================== SELETOR DE MÊS (compacto) ==============================
+   Substitui o antigo fichário de abas — que ficava largo demais com muitos
+   meses/anos de histórico — por um seletor de tamanho fixo: setas pra
+   navegar mês a mês e um rótulo central ("Julho de 2026") que abre um
+   popover com navegação por ano e uma grade dos 12 meses. */
 
-.month-tabs {
-  display: flex;
-  align-items: flex-end;
-  gap: 3px;
-  padding: 0 4px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.month-tabs::-webkit-scrollbar { display: none; }
-
-.month-tab {
-  flex: 0 0 auto;
+.month-switcher {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 9px 16px 8px;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.switcher-arrow {
   border: 1px solid var(--line-strong);
-  border-bottom: none;
-  border-radius: 8px 8px 0 0;
+  background: var(--bg-card);
+  color: var(--text-muted);
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-s);
+  font-size: 15px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.switcher-arrow:hover:not(:disabled) { color: var(--text); border-color: var(--text-faint); }
+.switcher-arrow:disabled { opacity: 0.35; cursor: default; }
+.switcher-arrow--small { width: 24px; height: 24px; font-size: 13px; }
+
+.switcher-label {
+  min-width: 190px;
+  text-align: center;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-card);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 7px 16px;
+  border-radius: var(--radius-s);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.switcher-label:hover { border-color: var(--accent-highlight); }
+.switcher-label::after { content: " ▾"; color: var(--text-faint); font-size: 10px; }
+
+.switcher-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  width: 268px;
+  padding: 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-card), 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+
+.switcher-popover[hidden] { display: none; }
+
+.switcher-year-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.switcher-year-label {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text);
+  min-width: 44px;
+  text-align: center;
+}
+
+.switcher-month-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.switcher-month-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 9px 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
   background: var(--bg-sunken);
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11.5px;
   letter-spacing: 0.02em;
-  white-space: nowrap;
-  transform: translateY(5px);
-  transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
-  position: relative;
+  text-transform: uppercase;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
-.month-tab:hover { transform: translateY(2px); color: var(--text); }
+.switcher-month-btn:hover:not(:disabled) { color: var(--text); border-color: var(--text-faint); }
 
-.month-tab.is-active {
-  background: var(--bg-card);
+.switcher-month-btn.is-active {
+  background: var(--accent-highlight-dim);
+  border-color: var(--accent-highlight);
   color: var(--text);
-  font-weight: 600;
-  transform: translateY(0);
-  z-index: 2;
-  box-shadow: 0 -2px 0 0 var(--accent-highlight) inset;
+  font-weight: 700;
 }
 
-.month-tab-dot {
+.switcher-month-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.switcher-month-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--text-faint);
-  flex: 0 0 auto;
 }
 
-.month-tab-dot--up { background: var(--accent-ganho); }
-.month-tab-dot--down { background: var(--accent-gasto); }
+.switcher-month-dot--up { background: var(--accent-ganho); }
+.switcher-month-dot--down { background: var(--accent-gasto); }
+.switcher-month-dot--none { background: transparent; }
 
 /* ============================== LEDGER TABLE ============================== */
 
@@ -856,13 +930,11 @@ select.budget-add-category {
 
 .ledger-table-wrap {
   border: 1px solid var(--line-strong);
-  border-radius: 0 var(--radius-l) var(--radius-l) var(--radius-l);
+  border-radius: var(--radius-l);
   overflow: hidden;
   background: var(--bg-card);
   box-shadow: var(--shadow-card);
 }
-
-.month-tabs:not(:empty) + .ledger-table-wrap { margin-top: -1px; }
 
 .ledger-table {
   width: 100%;
@@ -1108,37 +1180,6 @@ select.budget-add-category {
   * { transition: none !important; }
 }
 
-/* ============================== SELETOR DE ANO ============================== */
-
-.year-tabs {
-  display: flex;
-  gap: 6px;
-  padding: 0 4px 10px;
-}
-
-.year-tab {
-  flex: 0 0 auto;
-  padding: 5px 14px;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  background: var(--bg-sunken);
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
-}
-
-.year-tab:hover { color: var(--text); }
-
-.year-tab.is-active {
-  background: var(--accent-highlight);
-  border-color: var(--accent-highlight);
-  color: #1A1200;
-  font-weight: 700;
-}
-
 /* ============================== UNDO TOAST ============================== */
 
 .undo-toast {
@@ -1172,6 +1213,8 @@ select.budget-add-category {
 
 .undo-toast-btn:hover { background: var(--accent-highlight-dim); }
 
+.undo-toast[hidden] { display: none; }
+
 /* usado nas linhas/cards que estão no período de "desfazer" antes de excluir de fato */
 .is-pending-delete { display: none !important; }
 
@@ -1187,6 +1230,8 @@ select.budget-add-category {
   border-radius: var(--radius-m);
   margin-bottom: 16px;
 }
+
+.offsite-banner[hidden] { display: none; }
 
 .offsite-banner-icon { font-size: 16px; flex: 0 0 auto; }
 
